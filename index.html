@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Autonomous Surgical Tumor Resection by BerkeleyAutomation</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1 class="header">Energy-Bounded Caging: Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes</h1>
+        <ul>
+          <li><a class="buttons github" href="https://github.com/jeffmahler/caging">View On GitHub</a></li>
+        </ul>
+
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/BerkeleyAutomation">BerkeleyAutomation</a></p>
+
+
+      </header>
+
+<center>
+<div class="image">
+<img src="https://github.com/jeffmahler/caginess_docs/blob/master/ICRA2016/figures/illustrations/partial_cage_method_w_gravity_5.png?raw=true" alt="Image cannot be displayed" width="40%">
+</div>
+</center>
+
+<h3>
+<a id="abstract" class="anchor" href="#abstract" aria-hidden="true"><span class="octicon octicon-link"></span></a>Abstract</h3>
+
+<p>
+    An object is caged by an obstacle configuration if it cannot escape.
+    Cages do not necessarily immobilize an object and therefore may be robust to uncertainty in object pose and shape.
+    However, bounding all object motions may not always be necessary to manipulate an object.
+    For example, humans naturally place objects in containers such as bowls that restrict and object's motions under gravity, such as when a waiter carries a set of dishes.
+    To formally capture this notion, we define energy-bounded cages under a constant potential energy field (e.g. gravity) by the ability of an object to escape a gripper without exceeding an energy threshold, and measure these cages by the minimum energy required to escape.
+    We introduce Energy-Bounded-Cage-Analysis-2D (EBCA-2D), a provably-correct sampling-based algorithm that computes a lower bound on the minimum escape energy for a planar configuration of rigid polygonal obstacles (e.g. gripper jaws, walls, tables) and a rigid polygonal object in the plane.
+    Our algorithm runs in O(N^2 \log(1 / D) + N V^3 ) time, where N is the number of samples used, V is the sum of all vertices between the object and obstacles, and D is the resolution of energy values to search over.
+    While we cannot guarantee the tightness of our lower bound at this time, we find that EBCA-2D returns a nontrivial bound on a test set of nine parallel-jaw gripper configurations and four configurations of nonconvex obstacles across six nonconvex polygonal objects under a gravitational potential energy field.
+    We also find that an RRT* planner is not able to find an escape path with lower energy than our estimated lower bound in all test cases.
+    Our algorithm runs in approximately 3 minutes on a single machine, motivating future Cloud-based parallel implementations.
+  </p>
+
+<h3>
+<a id="documents" class="anchor" href="#documents" aria-hidden="true"><span class="octicon octicon-link"></span></a>Documents</h3>
+
+<ul>
+<li>Energy-Bounded Caging: Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes
+Jeffrey Mahler, Florian Pokorny, Zoe McCarthy, A Frank van der Stappen, Ken Goldberg. IEEE Robotics and Automation Letters, 2016 (Under Review). [<a href="">PDF</a>] [<a href="">Supplementary File</a>]</li>
+</ul>
+
+<h3>
+<a id="contributors" class="anchor" href="#contributors" aria-hidden="true"><span class="octicon octicon-link"></span></a>Contributors</h3>
+
+<p>This is an ongoing project at UC Berkeley with contributions from:<br>
+Jeffrey Mahler, <a href="http://www.cs.berkeley.edu/~ftpokorny/">Florian Pokorny</a>, Zoe McCarthy, A Frank van der Stappen, <a href="http://goldberg.berkeley.edu">Ken Goldberg</a></p>
+
+<h3>
+<a id="support-or-contact" class="anchor" href="#support-or-contact" aria-hidden="true"><span class="octicon octicon-link"></span></a>Support or Contact</h3>
+
+<p>Please Contact <a href="goldberg.berkeley.edu">Prof. Ken Goldberg</a>, Director of Automation Sciences Lab at <a href="mailto:goldberg@berkeley.edu">goldberg@berkeley.edu</a></p>
+
+<hr>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		
+  </body>
+</html>
