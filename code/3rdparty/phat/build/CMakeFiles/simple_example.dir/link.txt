@@ -1,0 +1,1 @@
+/usr/bin/c++    -fopenmp -O3 -DNDEBUG     CMakeFiles/simple_example.dir/src/simple_example.cpp.o  -o simple_example -rdynamic 

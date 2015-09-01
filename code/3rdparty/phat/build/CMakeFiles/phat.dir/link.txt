@@ -1,0 +1,1 @@
+/usr/bin/c++    -fopenmp -O3 -DNDEBUG     CMakeFiles/phat.dir/src/phat.cpp.o  -o phat -rdynamic 

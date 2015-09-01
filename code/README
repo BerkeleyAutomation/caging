@@ -1,0 +1,41 @@
+Code for Energy-Bounded Caging: Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes
+------------------------------------------------------------------------------------------------------------
+
+AUTHORS:
+
+Jeffrey Mahler and Zoe McCarthy
+jmahler@berkeley.edu
+zoemccarthy12@gmail.com
+Automation Sciences Lab, UC Berkeley
+
+This code accompanies the submission "Energy-Bounded Caging: Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes," currently under review for Robtics & Automation Letters, 2016
+
+
+DESCRIPTION:
+
+This project is ongoing research on using alpha shapes and persistent homology for proving
+path existence / nonexistence. It was adapted from Zoe McCarthy's work at UIUC on path planning:
+
+McCarthy, Zoe, Timothy Bretl, and Seth Hutchinson. "Proving path non-existence using sampling and alpha shapes."
+Robotics and Automation (ICRA), 2012 IEEE International Conference on. IEEE, 2012.
+
+The current focus of the project is to extend these techniques to prove whether or not a gripepr configuration
+"cages" an object and if this cannot be determined, to what extent is the object caged?
+
+VERSION 0.0 (Zoe Mccarthy):
+
+This project is an ongoing research project for a hybrid PRM for robotic motion planning.
+The goal is to have a PRM planner infused with the ability to halt if it detects that no path exists.
+This is a feature that most sampling based motion planners lack, and adding it will hopefully allow
+for a range of applications that require speedy determination of feasible motion queries.
+It will be able to support robots with 3 degrees of freedom, due to the support in CGAL for only
+2D and 3D alpha shapes, which are the basis for path non existence proving in the planner.
+It provides tools for visualizing the robot, obstacles, and planner.
+
+INSTALLATION:
+
+Libraries required for installation and usage:
+- CGAL
+- SOLID collision detection
+- QHULL
+- CGAL's geomview stream (will only work in linux)

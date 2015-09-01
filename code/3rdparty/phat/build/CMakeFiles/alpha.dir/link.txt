@@ -1,0 +1,1 @@
+/usr/bin/c++    -fopenmp -O3 -DNDEBUG     CMakeFiles/alpha.dir/addons/alpha_3.cpp.o  -o alpha -rdynamic -lCGAL -lCGAL_Core -lCGAL_ImageIO -lCGAL_Qt3 -lCGAL_Qt4 /usr/local/lib/libboost_thread.so -lpthread /usr/local/lib/libboost_system.so -lgmp -lmpfr -Wl,-rpath,/usr/local/lib 

@@ -1,0 +1,1 @@
+/usr/bin/c++    -fopenmp -O3 -DNDEBUG     CMakeFiles/convert.dir/src/convert.cpp.o  -o convert -rdynamic 
