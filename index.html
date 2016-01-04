@@ -16,8 +16,7 @@
   <body>
     <div class="wrapper">
       <header>
-        <h1 class="header">Energy Bounded Caging</h1>
-        <p class="header">Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes</p>
+        <h1 class="header">Energy-Bounded Caging</h1>
 
         <ul>
           <li class="download"><a class="buttons" href="https://github.com/BerkeleyAutomation/caging/zipball/master">Download ZIP</a></li>
@@ -30,22 +29,27 @@
 
       </header>
       <section>
-        <h4>
-<a id="energy-bounded-caging-formal-definition-and-2d-energy-lower-bound-algorithm-based-on-weighted-alpha-shapes" class="anchor" href="#energy-bounded-caging-formal-definition-and-2d-energy-lower-bound-algorithm-based-on-weighted-alpha-shapes" aria-hidden="true"><span class="octicon octicon-link"></span></a>Energy-Bounded Caging: Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes.</h4>
+        <h1>
+<a id="energy-bounded-caging-formal-definition-and-2d-energy-lower-bound-algorithm-based-on-weighted-alpha-shapes" class="anchor" href="#energy-bounded-caging-formal-definition-and-2d-energy-lower-bound-algorithm-based-on-weighted-alpha-shapes" aria-hidden="true"><span class="octicon octicon-link"></span></a>Energy-Bounded Caging: Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes</h1>
 
-<p><img src="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/images/partial_cage_method_w_gravity_5.png" alt="Energy-Bounded-Cage-Analysis 2D"></p>
+<p><img src="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/images/partial_cage_method_w_gravity-01.png" alt="Energy-Bounded-Cage-Analysis 2D"></p>
 
 <h3>
 <a id="abstract" class="anchor" href="#abstract" aria-hidden="true"><span class="octicon octicon-link"></span></a>Abstract</h3>
 
-<p>Caging grasps are valuable as they can be robust to bounded variations in object shape and pose and do not depend on friction.<br>
-Full caging is useful but may not be necessary in cases where forces such as gravity are present (consider a stone in a cupped hand).
-This paper extends caging theory by defining energy-bounded cages under a constant potential energy field (such as gravity) based on the minimum energy required to escape.
-This paper also introduces Energy-Bounded-Cage-Analysis-2D (EBCA-2D), a sampling-based algorithm for planar analysis that takes as input a constant energy field specified as a function over poses, a polygonal object, and a configuration of rigid polygonal obstacles, and returns a lower bound on the minimum escape energy, which can be infinite when the object is fully caged.<br>
-Building on recent results in collision detection and the computational geometric theory of weighted $\alpha$-shapes, EBCA-2D is provably-correct and runs in time O(N^2 + N \log(1 / Delta) + N V^3) time where N is the number of samples, Delta is an energy resolution used for binary search, and V is the total number of object and obstacle vertices.
-We implemented EBCA-2D and evaluated it with nine parallel-jaw gripper and four nonconvex obstacle configurations across six nonconvex polygonal objects. 
-We found that the lower bounds returned by EBCA-2D are consistent with intuition and with an RRT* optimal motion planning algorithm that was unable to find escape paths with lower energy.
-EBCA-2D required an average of 3 minutes per problem on a single-core processor but has potential to be parallelized in a Cloud-based implementation.</p>
+<p>Caging grasps are valuable as they can be robust to bounded variations in object shape and pose, do not depend on
+friction, and enable transport of an object without full immobilization.
+Complete caging of an object is useful but may not be necessary in cases where forces such as gravity are
+present. This paper extends caging theory by defining energy-bounded cages with
+respect to an energy field such as gravity. This paper also introduces Energy-Bounded-Cage-Analysis-2D
+(EBCA-2D), a sampling-based algorithm for planar analysis that takes as input an energy function
+over poses, a polygonal object, and a configuration of rigid fixed polygonal obstacles, e.g. a gripper, and returns a lower bound on the
+minimum escape energy. In the special case when the object is completely caged, our approach is independent of the energy and can provably verify the cage.
+EBCA-2D builds on recent results in collision detection and the computational geometric theory of weighted alpha-shapes and runs in O(s^2 + s n^2) time where s is the number of samples, n is the total number of object and obstacle
+vertices, and typically n << s. We implemented EBCA-2D and evaluated it with nine parallel-jaw gripper configurations and four nonconvex obstacle
+configurations across six nonconvex polygonal objects. We found that the lower bounds returned by EBCA-2D are consistent
+with intuition, and we verified the algorithm experimentally with Box2D simulations and RRT* motion planning experiments that were unable to find escape
+paths with lower energy.</p>
 
 <h3>
 <a id="references" class="anchor" href="#references" aria-hidden="true"><span class="octicon octicon-link"></span></a>References</h3>
