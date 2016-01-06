@@ -59,6 +59,8 @@ paths with lower energy.</p>
 Jeffrey Mahler, Florian Pokorny, Zoe McCarthy, A Frank van der Stappen, Ken Goldberg. IEEE Robotics and Automation Letters, 2016 (To Appear). [<a href="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/docs/jeff_ral2016_caging_submitted.pdf">PDF</a>] [<a href="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/docs/jeff_icra2016_caging_supplement_v2.pdf">Supplementary File</a>]</li>
 </ul>
 
+<h3>
+<a id="methodology" class="anchor" href="#methodology" aria-hidden="true"><span class="octicon octicon-link"></span></a>Methodology</h3>
 <p><img src="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/images/partial_cage_method_w_gravity-01.png" alt="Energy-Bounded-Cage-Analysis 2D"><figcaption>Fig. 2. Illustration of the steps of the EBCA-2D algorithm. Given a polygonal object (blue), set of polygonal obstacles / fingers (black) and an energy function U, EBCA-2D finds a lower bound on the minimum escape energy or reports that the object is completely caged.
 (1) The first step is to conservatively approximate the collision space by uniformly sampling object poses and keeping only poses where the object is in collision with the obstacles.  For each colliding pose q_i, we compute the penetration depth r_i which defines a ball strictly inside the collision space (red).
 (2) The union of these balls conservatively approximates the collision space. We then discretize the configuration space into cells by computing the weighted Delaunay triangulation from the points and use the weighted alpha-shape with alpha=0 to classify the cells belonging to the collision space (the white trianglular mesh).
