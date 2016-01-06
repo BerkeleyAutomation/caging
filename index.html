@@ -59,18 +59,22 @@ paths with lower energy.</p>
 Jeffrey Mahler, Florian Pokorny, Zoe McCarthy, A Frank van der Stappen, Ken Goldberg. IEEE Robotics and Automation Letters, 2016 (To Appear). [<a href="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/docs/jeff_ral2016_caging_submitted.pdf">PDF</a>] [<a href="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/docs/jeff_icra2016_caging_supplement_v2.pdf">Supplementary File</a>]</li>
 </ul>
 
-<p><img src="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/images/partial_cage_method_w_gravity-01.png" alt="Energy-Bounded-Cage-Analysis 2D"><figcaption>Fig. 2. Illustration of the steps of the EBCA-2D algorithm.</figcaption></p>
+<p><img src="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/images/partial_cage_method_w_gravity-01.png" alt="Energy-Bounded-Cage-Analysis 2D"><figcaption>Fig. 2. Illustration of the steps of the EBCA-2D algorithm. Given a polygonal object (blue), set of polygonal obstacles / fingers (black) and an energy function U, EBCA-2D finds a lower bound on the minimum escape energy or reports that the object is completely caged.
+(1) The first step is to conservatively approximate the collision space by uniformly sampling object poses and keeping only poses where the object is in collision with the obstacles.  For each colliding pose q_i, we compute the penetration depth r_i which defines a ball strictly inside the collision space (red).
+(2) The union of these balls conservatively approximates the collision space. We then discretize the configuration space into cells by computing the weighted Delaunay triangulation from the points and use the weighted alpha-shape with alpha=0 to classify the cells belonging to the collision space (the white trianglular mesh).
+(3) Finally, we use binary search to find the maximum energy "u" for which no escape path exists by classifying the set of cells that are either in collision or have energy higher than u, determining the connected components of the remaining "free" cells, and checking if the component containing the initial object pose q_0 is bounded.
+Blue and yellow indicate connected components, while green indicates poses such that U(q) > u.</figcaption></p>
 
 <h3>
 <a id="contributors" class="anchor" href="#contributors" aria-hidden="true"><span class="octicon octicon-link"></span></a>Contributors</h3>
 
 <p>This is an ongoing project at UC Berkeley with contributions from:<br>
-Jeffrey Mahler, <a href="http://www.cs.berkeley.edu/%7Eftpokorny/">Florian Pokorny</a>, Zoe McCarthy, A Frank van der Stappen, <a href="http://goldberg.berkeley.edu">Ken Goldberg</a></p>
+Jeffrey Mahler, <a href="http://www.cs.berkeley.edu/%7Eftpokorny/">Florian Pokorny</a>, Zoe McCarthy, <a href="http://www.staff.science.uu.nl/~stapp101/">A Frank van der Stappen</a>, <a href="http://goldberg.berkeley.edu">Ken Goldberg</a></p>
 
 <h3>
 <a id="support-or-contact" class="anchor" href="#support-or-contact" aria-hidden="true"><span class="octicon octicon-link"></span></a>Support or Contact</h3>
 
-<p>Please Contact <a href="goldberg.berkeley.edu">Prof. Ken Goldberg</a>, Director of Automation Sciences Lab at <a href="mailto:goldberg@berkeley.edu">goldberg@berkeley.edu</a></p>
+<p>Please Contact Jeffrey Mahler <a href="mailto:jmahler@berkeley.edu">jmahler@berkeley.edu</a> or <a href="goldberg.berkeley.edu">Prof. Ken Goldberg</a>, Director of Automation Sciences Lab at <a href="mailto:goldberg@berkeley.edu">goldberg@berkeley.edu</a></p>
 
 <hr>
 
