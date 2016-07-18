@@ -14,9 +14,14 @@
     <![endif]-->
   </head>
   <body>
+
     <div class="wrapper">
       <header>
         <h1 class="header">Energy-Bounded Caging</h1>
+        
+        <p class="header">
+        <a class ="header name" href="#synthesis">Synthesis Paper<a>
+        <a class = "header name" href="#analysis">Analysis Paper<a></p>
 
         <ul>
           <li class="download"><a class="buttons" href="https://github.com/BerkeleyAutomation/caging/zipball/master">Download ZIP</a></li>
@@ -29,13 +34,66 @@
 
       </header>
       <section>
-        <h1>
-<a id="energy-bounded-caging-formal-definition-and-2d-energy-lower-bound-algorithm-based-on-weighted-alpha-shapes" class="anchor" href="#energy-bounded-caging-formal-definition-and-2d-energy-lower-bound-algorithm-based-on-weighted-alpha-shapes" aria-hidden="true"><span class="octicon octicon-link"></span></a>Energy-Bounded Caging: Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes</h1>
+
+<h1>
+<a id="Energy Bounded Caging" class="anchor" href="#Energy Bounded Caging" aria-hidden="true"><span class="octicon octicon-link"></span></a>Energy Bounded Caging</h1>
 
 <p><img src="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/images/ebc_teaser.png" alt="Energy-Bounded Caging"><figcaption>Fig. 1. Two energy-bounded cages of industrial parts (blue) by robotic grippers (black) under a gravitational field indicated by the center arrow. Neither object is completely caged, but both are energy-bounded caged.</figcaption></p>
 
+<a name="synthesis"></a>
+<h2>
+<a id="Synthesis of Energy-Bounded Planar Caging Grasps using Persistent Homology" class="anchor" href="#Synthesis of Energy-Bounded Planar Caging Grasps using Persistent Homology" aria-hidden="true"><span class="octicon octicon-link"></span></a>Synthesis of Energy-Bounded Planar Caging Grasps using Persistent Homology</h2>
+
+<p><img src="images/syn_method.png"><figcaption>Fig. 2. Persistence diagram for ranking energy-bounded cages. Left: polygonal part and gripper polygons serve as
+input. We sample object poses X in collision and generate an alpha-shape representation (shown in gray in the three
+middle figures). Given an energy potential, we insert simplices in D(X)-A(X) in decreasing order of energy
+potential, creating a filtration of simplicial complexes. Voids (yellow and orange) are born with the addition of edges (red) at threshold energy levels, and die with the additions of the last triangle in the void (red). The associated second persistence diagram (right figure)
+reveals cages with large persistence corresponding to energy-bounded cages with high escape energy. In particular, configuration
+q_1 is identified as more persistent (and therefore with higher escape energy) than configuration q_2.</figcaption></p>
+
 <h3>
-<a id="abstract" class="anchor" href="#abstract" aria-hidden="true"><span class="octicon octicon-link"></span></a>Abstract</h3>
+<a id="summary" class="anchor" href="#summary" aria-hidden="true"><span class="octicon octicon-link"></span></a>Summary</h3>
+
+<p>Caging grasps restrict object motion without requiring complete immobilization, providing a practical alternative to
+force- and form-closure grasps. Previously, we introduced ``energy-bounded caging'', an extension that
+relaxes the requirement of complete caging in the presence of gravity and presented EBCA-2D, an algorithm for analyzing a proposed grasp using alpha shapes to lower-bound the escape energy.
+In this paper, we address the problem of synthesizing 
+energy-bounded cages by identifying optimal gripper and force-direction configurations that require the largest increases in
+potential energy for the object to escape.
+We present Energy-Bounded-Cage-Synthesis-2D (EBCS-2D), a sampling-based algorithm that uses
+persistent homology, a recently-developed multiscale approach for topological analysis, to efficiently compute 
+candidate rigid configurations of obstacles that form energy bounded cages of an object from an alpha-shape approximation to the configuration space.
+EBCS-2D runs in a worst-case O(s^3 + s*n^2) time where s is the number of samples, and n is the total number of
+object and obstacle vertices, where typically n << s, and in practice we observe run-times closer to O(s) for
+fixed n.
+We show that constant velocity pushing in the horizontal plane generates an energy field analogous to
+gravity in the vertical plane that can be analyzed with our approach.
+We implement EBCS-2D using the PHAT (Persistent Homology Algorithms Toolbox)
+library and study performance on a set of eight planar objects and four gripper types.
+Experiments suggest that EBCS-2D takes 2-3 minutes on a 6 core processor with 200,000 pose samples.
+We also find that an RRT* motion planner is unable to find escape paths with lower energy. Physical experiments suggest
+that EBCS-2D push grasps are robust to perturbations.</p>
+
+<h3>
+<a id="publications" class="anchor" href="#publications" aria-hidden="true"><span class="octicon octicon-link"></span></a>Publications</h3>
+
+<ul>
+<li>Synthesis of Energy-Bounded Planar Caging Grasps using Persistent Homology
+Jeffrey Mahler, Florian Pokorny, Sherdil Niyaz, Ken Goldberg. Workshop on the Algorithmic Foundations of Robotics, 2016 (In Review). [<a href="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/docs/jeff_ral2016_caging_submitted.pdf">PDF</a>] [<a href="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/docs/jeff_icra2016_caging_supplement_v2.pdf">Supplementary File</a>]</li>
+</ul>
+
+<a name="analysis"></a>
+<h2>
+<a id="energy-bounded-caging-formal-definition-and-2d-energy-lower-bound-algorithm-based-on-weighted-alpha-shapes" class="anchor" href="#energy-bounded-caging-formal-definition-and-2d-energy-lower-bound-algorithm-based-on-weighted-alpha-shapes" aria-hidden="true"><span class="octicon octicon-link"></span></a>Energy-Bounded Caging: Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes</h2>
+
+<p><img src="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/images/partial_cage_method_w_gravity-01.png" alt="Energy-Bounded-Cage-Analysis 2D"><figcaption>Fig. 3. Illustration of the steps of the EBCA-2D algorithm. Given a polygonal object (blue), set of polygonal obstacles / fingers (black) and an energy function U, EBCA-2D finds a lower bound on the minimum escape energy or reports that the object is completely caged.
+(1) The first step is to conservatively approximate the collision space by uniformly sampling object poses and keeping only poses where the object is in collision with the obstacles.  For each colliding pose q_i, we compute the penetration depth r_i which defines a ball strictly inside the collision space (red).
+(2) The union of these balls conservatively approximates the collision space. We then discretize the configuration space into cells by computing the weighted Delaunay triangulation from the points and use the weighted alpha-shape with alpha=0 to classify the cells belonging to the collision space (the white trianglular mesh).
+(3) Finally, we use binary search to find the maximum energy "u" for which no escape path exists by classifying the set of cells that are either in collision or have energy higher than u, determining the connected components of the remaining "free" cells, and checking if the component containing the initial object pose q_0 is bounded.
+Blue and yellow indicate connected components, while green indicates poses such that U(q) > u.</figcaption></p>
+
+<h3>
+<a id="summary" class="anchor" href="#summary" aria-hidden="true"><span class="octicon octicon-link"></span></a>Summary</h3>
 
 <p>Caging grasps are valuable as they can be robust to bounded variations in object shape and pose, do not depend on
 friction, and enable transport of an object without full immobilization.
@@ -52,28 +110,20 @@ with intuition, and we verified the algorithm experimentally with Box2D simulati
 paths with lower energy.</p>
 
 <h3>
-<a id="references" class="anchor" href="#references" aria-hidden="true"><span class="octicon octicon-link"></span></a>References</h3>
+<a id="publications" class="anchor" href="#publications" aria-hidden="true"><span class="octicon octicon-link"></span></a>Publications</h3>
 
 <ul>
 <li>Energy-Bounded Caging: Formal Definition and 2D Energy Lower Bound Algorithm Based on Weighted Alpha Shapes
 Jeffrey Mahler, Florian Pokorny, Zoe McCarthy, A Frank van der Stappen, Ken Goldberg. IEEE Robotics and Automation Letters, 2016 (To Appear). [<a href="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/docs/jeff_ral2016_caging_submitted.pdf">PDF</a>] [<a href="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/docs/jeff_icra2016_caging_supplement_v2.pdf">Supplementary File</a>]</li>
 </ul>
 
-<h3>
-<a id="methodology" class="anchor" href="#methodology" aria-hidden="true"><span class="octicon octicon-link"></span></a>Methodology</h3>
-<p><img src="https://github.com/BerkeleyAutomation/caging/raw/gh-pages/images/partial_cage_method_w_gravity-01.png" alt="Energy-Bounded-Cage-Analysis 2D"><figcaption>Fig. 2. Illustration of the steps of the EBCA-2D algorithm. Given a polygonal object (blue), set of polygonal obstacles / fingers (black) and an energy function U, EBCA-2D finds a lower bound on the minimum escape energy or reports that the object is completely caged.
-(1) The first step is to conservatively approximate the collision space by uniformly sampling object poses and keeping only poses where the object is in collision with the obstacles.  For each colliding pose q_i, we compute the penetration depth r_i which defines a ball strictly inside the collision space (red).
-(2) The union of these balls conservatively approximates the collision space. We then discretize the configuration space into cells by computing the weighted Delaunay triangulation from the points and use the weighted alpha-shape with alpha=0 to classify the cells belonging to the collision space (the white trianglular mesh).
-(3) Finally, we use binary search to find the maximum energy "u" for which no escape path exists by classifying the set of cells that are either in collision or have energy higher than u, determining the connected components of the remaining "free" cells, and checking if the component containing the initial object pose q_0 is bounded.
-Blue and yellow indicate connected components, while green indicates poses such that U(q) > u.</figcaption></p>
-
-<h3>
+<h2>
 <a id="contributors" class="anchor" href="#contributors" aria-hidden="true"><span class="octicon octicon-link"></span></a>Contributors</h3>
 
-<p>This is an ongoing project at UC Berkeley with contributions from:<br>
-Jeffrey Mahler, <a href="http://www.cs.berkeley.edu/%7Eftpokorny/">Florian Pokorny</a>, Zoe McCarthy, <a href="http://www.staff.science.uu.nl/~stapp101/">A Frank van der Stappen</a>, <a href="http://goldberg.berkeley.edu">Ken Goldberg</a></p>
+<p>These are ongoing projects at UC Berkeley with contributions from:<br>
+Jeffrey Mahler, <a href="http://www.cs.berkeley.edu/%7Eftpokorny/">Florian Pokorny</a>, Zoe McCarthy, Sherdil Niyaz, <a href="http://www.staff.science.uu.nl/~stapp101/">A Frank van der Stappen</a>, <a href="http://goldberg.berkeley.edu">Ken Goldberg</a></p>
 
-<h3>
+<h2>
 <a id="support-or-contact" class="anchor" href="#support-or-contact" aria-hidden="true"><span class="octicon octicon-link"></span></a>Support or Contact</h3>
 
 <p>Please Contact Jeffrey Mahler <a href="mailto:jmahler@berkeley.edu">jmahler@berkeley.edu</a> or <a href="goldberg.berkeley.edu">Prof. Ken Goldberg</a>, Director of Automation Sciences Lab at <a href="mailto:goldberg@berkeley.edu">goldberg@berkeley.edu</a></p>
@@ -86,8 +136,9 @@ Jeffrey Mahler, <a href="http://www.cs.berkeley.edu/%7Eftpokorny/">Florian Pokor
         <p><small>Hosted on <a href="https://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
       </footer>
     </div>
+
     <!--[if !IE]><script>fixScale(document);</script><![endif]-->
-		          <script type="text/javascript">
+              <script type="text/javascript">
             var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
             document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
           </script>
