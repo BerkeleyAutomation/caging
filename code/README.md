@@ -25,18 +25,25 @@ The following libraries are required for installation and usage:
 
 Install the dependencies above as well as 3rdparty/libccd, then build using the standard cmake workflow:
 
-mkdir build && cd build
+```mkdir build && cd build
 cmake ..
 make -j4
+```
 
 If successful, the binary will be at build/src/alpha.
 
+Data
+----
+Example data can be downloaded [here](https://github.com/BerkeleyAutomation/caging/raw/gh-pages/data.zip). To request additional data, email jmahler@berkeley.edu with the subject line "Request for Energy-Bounded Caging Data."
+
 Authors
 -------
-Jeffrey Mahler, Sherdil Niyaz, and Zoe McCarthy
-jmahler@berkeley.edu
-sniyaz@berkeley.edu
-zoemccarthy12@gmail.com
+Jeffrey Mahler: jmahler@berkeley.edu
+
+Sherdil Niyaz: sniyaz@berkeley.edu
+
+Zoe McCarthy: zoemccarthy12@gmail.com
+
 AUTOLAB, UC Berkeley
 
 
