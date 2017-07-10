@@ -5,7 +5,7 @@
 #include <glog/logging.h>
 
 #define GOAL_DIST_THRESH 2.5f
-#define IMAGE_SCALE 15.0f
+#define IMAGE_SCALE 7.5f
 
 /* 
  * ===  FUNCTION  ======================================================================
@@ -59,13 +59,6 @@ void CageChecker::Draw_Gripper()
   }
 }
 
-void CageChecker::Draw_Collision(CGAL::Triple<bool, DT_Vector3, DT_Vector3> coll)
-{
-  // gv_ << CGAL::BLUE;
-  // LineSegment line_seg = ShapeFactory::CreateLine(coll.second, coll.third, extrude_width_); 
-  // gv_ << line_seg;
-}
-
 void CageChecker::Render_Object(cv::Mat& image)
 {
   object_->RenderToImage(image, 'g');
@@ -94,8 +87,6 @@ void CageChecker::Render_Gripper_Tris(cv::Mat& image)
 bool CageChecker::Set_Object_Pose(float tx, float ty, float theta)
 {
   Eigen::Matrix4f pose = CreatePose(tx, ty, theta);
-  // std::cout << "SetObj" << std::endl;
-  // std::cout << pose << std::endl;
   object_->SetPose(pose, true); // TODO: make this actualy work
 }
 
@@ -163,13 +154,13 @@ CageChecker::Check_Cage(Pose2D pose, EscapeEnergyConfig energy_config)
   timer_.reset();
   timer_.start();
   EscapeEnergyResult energy_result;
-  energy_config.energy_min = GravityPotential::GRAVITY_ACCEL * object_->Mass() * cf_config_.x_min;
-  energy_config.energy_max = GravityPotential::GRAVITY_ACCEL * object_->Mass() * cf_config_.x_max;
+  energy_config.energy_min = 9.81f * object_->Mass() * cf_config_.x_min;
+  energy_config.energy_max = 9.81f * object_->Mass() * cf_config_.x_max;
 
   LOG(INFO) << "Min " << energy_config.energy_min;
   LOG(INFO) << "Max " << energy_config.energy_max;
 
-  cf_approximator_->min_escape_energy(pose, energy_config, energy_result);
+  cf_approximator_->synthesize_grasps(10, pose, energy_config, energy_result, 0.0f, M_PI/4);
   timer_.stop();
   LOG(INFO) << "Cage check time: " << timer_.time();
 
@@ -209,6 +200,36 @@ CageChecker::Find_Escape_Path(float tx, float ty, float theta, float energy_thre
   return cep.FindEscapePath(params, timeout);
 }
 
+PathPlanningResult
+CageChecker::Upper_Bound_Escape_Energy(float tx, float ty, float theta,
+                                       float energy_thresh, float energy_angle,
+                                       float timeout, float range, float max_push_force)
+{
+  float mult = 5.0f;
+  PathPlanningParams params;
+  params.start_tx = tx;
+  params.start_ty = ty;
+  params.start_theta = theta;
+  params.goal_tx = mult*cf_config_.x_min + 0.1;
+  params.goal_ty = 0.0f;
+  params.goal_theta = 0;
+
+  params.min_tx = mult*cf_config_.x_min;
+  params.min_ty = mult*cf_config_.y_min;;
+  params.min_theta = mult * M_PI * (-cf_config_.num_rots - 1);
+
+  params.max_tx = mult*cf_config_.x_max;
+  params.max_ty = mult*cf_config_.y_max;
+  params.max_theta = mult * M_PI * cf_config_.num_rots;
+
+  params.goal_dist_thresh = GOAL_DIST_THRESH;
+  params.planner_range = range;
+  params.energy_angle = energy_angle;
+
+  CageEscapePlanner cep(object_, gripper_fingers_, energy_thresh);
+  return cep.UpperBoundEscapeEnergy(params, timeout, max_push_force);
+}
+
 SimulationResult
 CageChecker::Ratio_Escape_Paths(float tx, float ty, float theta, int num_samples, float potential_thresh, float timeout)
 {
@@ -231,5 +252,36 @@ CageChecker::Ratio_Escape_Paths(float tx, float ty, float theta, int num_samples
   bool use_gui = false;
   StaticCageSimulator scs(object_, gripper_fingers_);
   return scs.RatioEscapesBox2D(num_samples, use_gui, potential_thresh);
+}
+
+std::vector< std::vector<synthesis_info> >
+CageChecker::synthesize_grasps(EscapeEnergyConfig energy_config, int num_searches, float angle_sweep, float angle_disc, bool check_reachability, float max_push_force)
+{
+  // in future call the function with the default value
+  Pose2D p;
+  Pose3DToParams2D(object_->Pose(), p.x, p.y, p.theta);
+  return synthesize_grasps(p, energy_config, num_searches, angle_sweep, angle_disc, check_reachability, max_push_force);
+}
+
+	std::vector< std::vector<synthesis_info> >
+CageChecker::synthesize_grasps(Pose2D pose, EscapeEnergyConfig energy_config,
+                               int num_searches, float angle_sweep,
+                               float angle_disc, bool check_reachability, float max_push_force)
+{
+  timer_.reset();
+  timer_.start();
+  EscapeEnergyResult energy_result;
+  energy_config.energy_min = 9.81f * object_->Mass() * cf_config_.x_min;
+  energy_config.energy_max = 9.81f * object_->Mass() * cf_config_.x_max;
+
+  LOG(INFO) << "Min " << energy_config.energy_min;
+  LOG(INFO) << "Max " << energy_config.energy_max;
+
+  std::vector< std::vector<synthesis_info> > all_poses = cf_approximator_->synthesize_grasps(num_searches, pose, energy_config, 
+										energy_result, angle_sweep, angle_disc, check_reachability, max_push_force);
+  timer_.stop();
+  LOG(INFO) << "Cage check time: " << timer_.time();
+
+  return all_poses;
 }
 

@@ -11,9 +11,8 @@ target_link_libraries (${CMAKE_PROJECT_NAME}_Core ${DEPENDENCY_LIBS})
 
 # create executable
 add_executable(alpha main.cpp)
-target_link_libraries(alpha ${CMAKE_PROJECT_NAME}_Core ${DEPENDENCY_LIBS})
+target_link_libraries(alpha ${DEPENDENCY_LIBS} ${CMAKE_PROJECT_NAME}_Core)
 
 # create executable
-add_executable(compound compound_grippers_main.cpp)
-target_link_libraries(compound ${CMAKE_PROJECT_NAME}_Core ${DEPENDENCY_LIBS})
-
+#add_executable(compound compound_grippers_main.cpp)
+#target_link_libraries(compound ${CMAKE_PROJECT_NAME}_Core ${DEPENDENCY_LIBS})

@@ -19,11 +19,9 @@
 
 #ifndef CGAL_IO_POLYHEDRON_IOSTREAM_H
 #define CGAL_IO_POLYHEDRON_IOSTREAM_H 1
-
-#include <CGAL/Polyhedron_3.h>
+#include "Typedef.h"
 #include <CGAL/IO/print_OFF.h>
 #include <CGAL/IO/scan_OFF.h>
-#include <iostream>
 
 namespace CGAL {
 

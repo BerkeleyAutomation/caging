@@ -120,9 +120,6 @@ int main ( int argc, char *argv[] )
   std::string gripper_path = config.GripperPath();
   std::vector<std::string> object_list = config.ObjectList();
 
-  MultiObjectConfig gc = config.GripperConfig();
-  MultiObjectConfig oc = config.ObjectConfig();
-
   // render the sdfs for visualization
 #ifdef VIS
   CGAL::Geomview_stream gv(CGAL::Bbox_3(-extrusion, -extrusion, -extrusion, extrusion, extrusion, extrusion));

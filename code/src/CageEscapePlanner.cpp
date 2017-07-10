@@ -53,11 +53,12 @@ bool PlanningCollisionChecker::isValid(const ompl::base::State* state) const
 }
 
 PlanningCollisionAndEnergyChecker::PlanningCollisionAndEnergyChecker(const ompl::base::SpaceInformationPtr& si, Mesh* object, std::vector<Mesh*> obstacles,
-                                                   float energy_thresh, ompl::base::ScopedState<> start)
+                                                                     float energy_thresh, PotentialFunction* potential_func, ompl::base::ScopedState<> start)
   : ompl::base::StateValidityChecker(si),
     object_(object),
     obstacles_(obstacles),
-    energy_thresh_(energy_thresh)
+    energy_thresh_(energy_thresh),
+    potential_func_(potential_func)
 {
   tx_start_ = start->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
   ty_start_ = start->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
@@ -83,7 +84,7 @@ bool PlanningCollisionAndEnergyChecker::isValid(const ompl::base::State* state) 
 
     // test computation of penetration depth
     for (unsigned int j = 0; j < obstacles_.size(); j++) {
-      MeshCollisionResult c = Mesh::UpperBoundCollision(object_, obstacles_[j]);
+      MeshCollisionResult c = Mesh::LowerBoundCollision(object_, obstacles_[j]);
       if (c.collision) {
         collision = true;
       }
@@ -91,7 +92,8 @@ bool PlanningCollisionAndEnergyChecker::isValid(const ompl::base::State* state) 
   }
 
   // check energy
-  float energy = object_->Mass() * GravityPotential::GRAVITY_ACCEL * (tx - tx_start_);
+  ASE::Vertex v(Bare_point(tx, ty, theta), 0.0f);
+  float energy = potential_func_->potential(v);
   bool exceeded_energy = (energy > energy_thresh_);
 
   return !collision && !exceeded_energy;
@@ -129,7 +131,7 @@ ompl::base::Cost WorkOptimizationObjective::motionCost(const ompl::base::State* 
 
   // calculate gravity cost from the origin
   float dh = (s2_3d->values[0]);// - s1_3d->values[0]);
-  float gravity_cost = mass_ * GravityPotential::GRAVITY_ACCEL * dh;
+  float gravity_cost = mass_ * 9.81f * dh;
 
   // add cost offset to prevent negative edge weights
   // std::cout << "Work cart: " << work_cart << std::endl;
@@ -144,6 +146,32 @@ ompl::base::Cost WorkOptimizationObjective::motionCostHeuristic(const ompl::base
   return motionCost(s1, s2);
 }
 
+MinimaxGravityOptimizationObjective::MinimaxGravityOptimizationObjective(const ompl::base::SpaceInformationPtr& si, float mass,
+                                                                         float moment_of_inertia, float h0,
+                                                                         PotentialFunction* potential_func,
+                                                                         float cost_offset)
+  : MinimaxObjective(si),
+    mass_(mass),
+    moment_of_inertia_(moment_of_inertia),
+    h0_(h0),
+    cost_offset_(cost_offset),
+    potential_func_(potential_func)
+{
+}
+
+ompl::base::Cost MinimaxGravityOptimizationObjective::stateCost(const ompl::base::State* s) const
+{
+  const ompl::base::RealVectorStateSpace::StateType* s_3d =
+    s->as<ompl::base::RealVectorStateSpace::StateType>();
+  float x = s_3d->values[0];
+  float y = s_3d->values[1];
+  float theta = s_3d->values[2];
+  ASE::Vertex v(Bare_point(x, y, theta), 0.0f);
+  float gravity_cost = potential_func_->potential(v);
+  return ompl::base::Cost(gravity_cost + cost_offset_);
+}
+
+
 CageEscapePlanner::CageEscapePlanner(Mesh* object, std::vector<Mesh*> obstacles, float energy_thresh)
   : object_(object),
     obstacles_(obstacles),
@@ -151,7 +179,7 @@ CageEscapePlanner::CageEscapePlanner(Mesh* object, std::vector<Mesh*> obstacles,
 {
 }
 
-PathPlanningResult CageEscapePlanner::FindEscapePath(PathPlanningParams params, float timeout)
+PathPlanningResult CageEscapePlanner::FindEscapePath(PathPlanningParams params, float timeout, float max_push_force)
 {
   const int dim = 3;
   ompl::base::StateSpacePtr space(new ompl::base::RealVectorStateSpace(dim));
@@ -187,14 +215,17 @@ PathPlanningResult CageEscapePlanner::FindEscapePath(PathPlanningParams params, 
   // get center of mass for cost
   float mass = object_->Mass();
   float moment_of_inertia = object_->MomentOfInertia();
-  float cost_offset = mass * GravityPotential::GRAVITY_ACCEL * (params.max_ty - params.min_ty); // max gravity penalty to keep nonegative
-  float delta = 0.0f * mass * GravityPotential::GRAVITY_ACCEL; // unit increase in y coordinate
+  PotentialFunction* potential_func = new LinearPotentialFunction(Bare_point(0,0,0), max_push_force, 1.0f, 1.0f, 1.0f,
+                                                                  params.energy_angle);
+  float cost_offset = 1000.0f;
+  float delta = 0.0f; // unit increase in y coordinate
   std::cout << "Planning with energy thresh " << energy_thresh_ + delta << " and range " << params.planner_range << std::endl;
 
   // state validity checker
   si->setStateValidityChecker(ompl::base::StateValidityCheckerPtr(new PlanningCollisionAndEnergyChecker(si, object_, obstacles_,
-                                                                                               energy_thresh_ + delta,
-                                                                                               start)));
+                                                                                                        energy_thresh_ + delta,
+                                                                                                        potential_func,
+                                                                                                        start)));
   si->setup();
 
   // create a problem instance
@@ -251,17 +282,144 @@ PathPlanningResult CageEscapePlanner::FindEscapePath(PathPlanningParams params, 
         result.states.push_back(state);
 
         // compute energy
-        float energy = mass * GravityPotential::GRAVITY_ACCEL * soln_states[i]->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+        float energy = mass * 9.81f * soln_states[i]->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
         if (energy > max_path_energy) {
           max_path_energy = energy;
           max_state = i;
         }
       }
       result.max_energy = max_path_energy;
-      result.normalized_max_energy = max_path_energy / (mass * GravityPotential::GRAVITY_ACCEL);
+      result.normalized_max_energy = max_path_energy / (mass * 9.81f);
       result.max_state = max_state;
     }
   }
+
+  return result;
+}
+
+PathPlanningResult CageEscapePlanner::UpperBoundEscapeEnergy(PathPlanningParams params, float timeout, float max_push_force)
+{
+  const int dim = 3;
+  ompl::base::StateSpacePtr space(new ompl::base::RealVectorStateSpace(dim));
+
+  // set the bounds of space
+  ompl::base::RealVectorBounds bounds(dim);
+  bounds.setLow(0, params.min_tx);
+  bounds.setLow(1, params.min_ty);
+  bounds.setLow(2, params.min_theta);
+  bounds.setHigh(0, params.max_tx);
+  bounds.setHigh(1, params.max_ty);
+  bounds.setHigh(2, params.max_theta);
+  space->as<ompl::base::RealVectorStateSpace>()->setBounds(bounds);
+
+  // Construct a space information instance for this state space
+  ompl::base::SpaceInformationPtr si(new ompl::base::SpaceInformation(space));
+
+  // set start state
+  ompl::base::ScopedState<> start(space);
+  start->as<ompl::base::RealVectorStateSpace::StateType>()->values[0] = params.start_tx;
+  start->as<ompl::base::RealVectorStateSpace::StateType>()->values[1] = params.start_ty;
+  start->as<ompl::base::RealVectorStateSpace::StateType>()->values[2] = params.start_theta;
+  
+  // set goal state
+  ompl::base::ScopedState<> goal(space);
+  goal->as<ompl::base::RealVectorStateSpace::StateType>()->values[0] = params.goal_tx;
+  goal->as<ompl::base::RealVectorStateSpace::StateType>()->values[1] = params.goal_ty;
+  goal->as<ompl::base::RealVectorStateSpace::StateType>()->values[2] = params.goal_theta;
+
+  std::cout << "Start " << params.start_tx << " " << params.start_ty << " " << params.start_theta << std::endl;
+  std::cout << "Goal " << params.goal_tx << " " << params.goal_ty << " " << params.goal_theta << std::endl;
+
+  // get center of mass for cost
+  float mass = object_->Mass();
+  float moment_of_inertia = object_->MomentOfInertia();
+  PotentialFunction* potential_func = new LinearPotentialFunction(Bare_point(params.start_tx, params.start_ty, params.start_theta),
+                                                           max_push_force, 1.0f, 1.0f, 1.0f,
+                                                           params.energy_angle);
+  float cost_offset = 10000.0f;
+  float delta = 0.0f; // numeric tolerance
+  std::cout << "Planning with energy thresh " << energy_thresh_ + delta << " and range " << params.planner_range << std::endl;
+
+  // state validity checker
+  si->setStateValidityChecker(ompl::base::StateValidityCheckerPtr(new PlanningCollisionAndEnergyChecker(si, object_, obstacles_,
+                                                                                                        energy_thresh_ + delta,
+                                                                                                        potential_func,
+                                                                                                        start)));
+  si->setup();
+
+  // create a problem instance
+  ompl::base::ProblemDefinitionPtr pdef(new ompl::base::ProblemDefinition(si));
+  pdef->setStartAndGoalStates(start, goal);
+  pdef->setOptimizationObjective(ompl::base::OptimizationObjectivePtr(new MinimaxGravityOptimizationObjective(si, mass, moment_of_inertia,
+                                                                                                              params.start_tx,
+                                                                                                              potential_func,
+                                                                                                              cost_offset)));
+
+  // construct our optimizing planner using the RRTstar algorithm.
+  ompl::geometric::RRTstar* rrt = new ompl::geometric::RRTstar(si);
+  rrt->setRange(params.planner_range);
+  ompl::base::PlannerPtr optimizingPlanner(rrt);
+
+  // set the problem instance for our planner to solve
+  optimizingPlanner->setProblemDefinition(pdef);
+  optimizingPlanner->setup();
+
+  // attempt to solve the planning problem within configured time
+  ompl::base::PlannerStatus solved = optimizingPlanner->solve(timeout);
+
+  if (solved == ompl::base::PlannerStatus::APPROXIMATE_SOLUTION) {
+    LOG(INFO) << "APPROX SOLUTION!";    
+  }
+  else if (solved == ompl::base::PlannerStatus::EXACT_SOLUTION) {
+    LOG(INFO) << "EXACT SOLUTION!";
+  }
+  else {
+    LOG(INFO) << "NO SOLUTION";
+  }
+
+  PathPlanningResult result;
+  result.path_exists = false;
+
+  if (!solved)
+    std::cout << "NOT SOLVED" << std::endl;
+  
+  if (solved) {
+    boost::shared_ptr<ompl::geometric::PathGeometric> solution_path = \
+      boost::static_pointer_cast<ompl::geometric::PathGeometric>(pdef->getSolutionPath());
+
+    float dist_from_goal = pdef->getSolutionDifference();
+    if (dist_from_goal < params.goal_dist_thresh) {
+      result.path_exists = true;
+
+      // get the resulting path and max energy achieved
+      float max_path_energy = 0.0f;
+      int max_state = 0;
+      std::vector<ompl::base::State*> soln_states = solution_path->getStates();
+      for (unsigned int i = 0; i < soln_states.size(); i++) {
+        // store state
+        Eigen::Vector3f state;
+        state << soln_states[i]->as<ompl::base::RealVectorStateSpace::StateType>()->values[0],
+          soln_states[i]->as<ompl::base::RealVectorStateSpace::StateType>()->values[1],
+          soln_states[i]->as<ompl::base::RealVectorStateSpace::StateType>()->values[2];
+        result.states.push_back(state);
+
+        // compute energy
+        float tx = soln_states[i]->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+        float ty = soln_states[i]->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+        float theta = soln_states[i]->as<ompl::base::RealVectorStateSpace::StateType>()->values[2];
+        ASE::Vertex v(Bare_point(tx, ty, theta), 0.0f);
+        float energy = potential_func->potential(v);
+        if (energy > max_path_energy) {
+          max_path_energy = energy;
+          max_state = i;
+        }
+      }
+      result.max_energy = max_path_energy;
+      result.normalized_max_energy = max_path_energy / (mass * 9.81f);
+      result.max_state = max_state;
+    }
+  }
+  delete potential_func;
 
   return result;
 }
@@ -307,7 +465,7 @@ float CageEscapePlanner::IntegrateEscapePathEnergy(PathPlanningParams params, st
   ompl::geometric::PRMstar* optimizingPlanner = new ompl::geometric::PRMstar(si);
   float mass = object_->Mass();
   float moment_of_inertia = object_->MomentOfInertia();
-  float cost_offset = mass * GravityPotential::GRAVITY_ACCEL * (params.max_ty - params.min_ty); // max gravity penalty
+  float cost_offset = mass * 9.81f * (params.max_ty - params.min_ty); // max gravity penalty
     
   // loop through the separator tris, plan to each one, and summ result
   float gibbs_prob = 0.0f;

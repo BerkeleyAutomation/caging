@@ -11,16 +11,7 @@
 #ifndef CAGING_H
 #define CAGING_H
 
-#include <CGAL/Cartesian.h>
-#include <CGAL/Aff_transformation_3.h>
-
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Dense>
-
-#include <iostream>
-#include <CGAL/Timer.h>
 #include "ShapeFactory.hpp"
-#include "CollisionChecker.h"
 #include "WorkspaceObject.h"
 #include "ConfigurationMapper.h"
 #include "Mesh.hpp"
@@ -28,31 +19,9 @@
 #include "Configuration_Space_Approximator.h" 
 #include "StaticCageSimulator.h"
 #include "Util.h"
+#include "Typedef.h"
 
-#include <list>
-#include <vector>
-#include <math.h>
-
-#include <fstream>
 #include <unistd.h> // for sleep()
-
-
-#include <CGAL/IO/Geomview_stream.h>
-#include <CGAL/IO/Triangulation_geomview_ostream_3.h>
-#include <CGAL/IO/Polyhedron_geomview_ostream.h>
-#include <CGAL/utility.h>
-
-#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-#include <CGAL/Polyhedron_3.h>
-
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Dense>
-
-typedef CGAL::Timer                         Timer;
-
-typedef std::vector<double>                                 Configuration;
-typedef std::list< Configuration >                          Path;
-typedef std::pair< Path, bool >                             Path_with_exist;
 
 struct CageResult
 {
@@ -82,7 +51,6 @@ class CageChecker
   void Render_Gripper(cv::Mat& image);
   void Render_Object_Tris(cv::Mat& image);
   void Render_Gripper_Tris(cv::Mat& image);
-  void Draw_Collision(CGAL::Triple<bool, DT_Vector3, DT_Vector3> coll);
   void Clear_Geomview() { gv_->clear();}
   
  public:
@@ -98,10 +66,17 @@ class CageChecker
   void Set_Configuration_Space_Approximator();
   
  public:
+  //Synthesize Grasps
+  std::vector< std::vector<synthesis_info> > synthesize_grasps(EscapeEnergyConfig energy_config, int num_searches = 10, 
+						float angle_sweep = 0, float angle_disc = M_PI/4, bool check_reachability = true, float max_push_force = 1.0f);
+  std::vector< std::vector<synthesis_info> > synthesize_grasps(Pose2D pose, EscapeEnergyConfig energy_config, int num_searches = 10, 
+						float angle_sweep = 0, float angle_disc = M_PI/4, bool check_reachability = true, float max_push_force = 1.0f);
+  
   // Check cages
   CageResult Check_Cage(EscapeEnergyConfig energy_config);
-  CageResult Check_Cage(Pose2D pose, EscapeEnergyConfig energy_config);
+  CageResult Check_Cage(Pose2D pose, EscapeEnergyConfig energy_config); 
   PathPlanningResult Find_Escape_Path(float tx, float ty, float theta, float energy_thresh, float timeout = 15.0f, float range = 1.0f);
+  PathPlanningResult Upper_Bound_Escape_Energy(float tx, float ty, float theta, float energy_thresh, float energy_angle, float timeout = 15.0f, float range = 1.0f, float max_push_force = 1.0f);
   SimulationResult Ratio_Escape_Paths(float tx, float ty, float theta, int num_samples = 100, float potential_thresh = FLT_MAX, float timeout = 1.0f);
   void Clear_Planner();
 

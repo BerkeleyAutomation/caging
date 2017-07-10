@@ -23,28 +23,14 @@
 
 #define DEBUG
 
-#ifdef DEBUG
-#include <stdio.h>
-using namespace std;
-#endif
+//#ifdef DEBUG
+//#include <stdio.h>
+//using namespace std;
+//#endif
 
-#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-#include <CGAL/Polyhedron_3.h>
-#include <CGAL/Aff_transformation_3.h>
-#include <iostream>
 #include "PRM.h"
 #include "ConfigurationMapper.h"
-#include <vector>
-#include <list>
-#include <math.h>
-
-
-typedef std::vector<double>                Configuration;
-
-typedef CGAL::Exact_predicates_exact_constructions_kernel Kernel;
-typedef CGAL::Aff_transformation_3<Kernel> CGAL_Aff_Transform;
-typedef CGAL::Polyhedron_3<Kernel>         Polyhedron;
-typedef Polyhedron::Halfedge_handle        Halfedge_handle;
+#include "Typedef.h"
 
 template <class Poly>
 typename Poly::Halfedge_handle make_rectangle_3( Poly& P, double width_div_2, double joint_length, double height_div_2) {

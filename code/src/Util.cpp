@@ -1,7 +1,46 @@
 #include "Util.h"
 
 // helper functions
-double Distance_Squared(DT_Vector3 p1, DT_Vector3 p2)
+void wait ( int seconds )
+{
+  clock_t endwait;
+  endwait = clock () + seconds * CLOCKS_PER_SEC ;
+  while (clock() < endwait) {}
+}
+
+bool file_exists(const char* file_name) 
+{
+  ifstream ifile(file_name);
+  return ifile;
+}
+
+std::string get_filename(std::string full_path)
+{
+  boost::filesystem::path file_path(full_path);
+  return file_path.filename().string();
+}
+
+Eigen::Vector2d rotate_vector(Eigen::Vector2d input_vector, float theta_offset)
+{
+  Eigen::MatrixXd rotation_matrix(2, 2);
+  rotation_matrix(0, 0) = cos(theta_offset);
+  rotation_matrix(1, 0) = sin(theta_offset);
+  rotation_matrix(0, 1) = -sin(theta_offset);
+  rotation_matrix(1, 1) = cos(theta_offset);
+  return rotation_matrix*input_vector;
+
+}
+
+//Given vectors of points in a 3D triangle, return its area
+float triangle_area(std::vector< Eigen::Vector3d > triangle_points)
+{
+  Eigen::Vector3d AB = triangle_points[0] - triangle_points[1];
+  Eigen::Vector3d AC = triangle_points[0] - triangle_points[2];
+  double theta = (double) acos(AB.dot(AC)/(AB.norm()*AC.norm()));
+  return (float) 0.5*AB.norm()*AC.norm()*sin(theta);
+}
+
+double Distance_Squared(Eigen::Vector3d p1, Eigen::Vector3d p2)
 {
   double ret_dist = 0.0;
   for(int i = 0; i < 3; i++) {
@@ -10,16 +49,7 @@ double Distance_Squared(DT_Vector3 p1, DT_Vector3 p2)
   return ret_dist;
 }
 
-double Magnitude_Squared(const DT_Vector3 p)
-{
-  double ret_dist = 0.0;
-  for(int i = 0; i < 3; i++) {
-    ret_dist += p[i]*p[i];
-  }
-  return ret_dist;
-}
-
-double Magnitude_Squared(DT_Vector3 p)
+double Magnitude_Squared(Eigen::Vector3d p)
 {
   double ret_dist = 0.0;
   for(int i = 0; i < 3; i++) {
@@ -175,4 +205,25 @@ bool LoadOBJFile(const char* filename, std::vector<fcl::Vec3f>& points, std::vec
     return false;
   }
   return true;
+}
+
+
+Tetrahedron_3 Convert_Cell_To_Tetrahedron ( Cell_handle in_cell )
+{
+  return Tetrahedron_3(in_cell->vertex(0)->point(), in_cell->vertex(1)->point(),
+                     in_cell->vertex(2)->point(), in_cell->vertex(3)->point());
+}		/* -----  end of function Convert_Cell_To_Tetrahedron  ----- */
+
+
+// Variants for simplices!
+Tetrahedron_3 Convert_Simplex_To_Tetrahedron ( ASE::Simplex in_simplex )
+{
+  return Tetrahedron_3(in_simplex.vertex(0).point(), in_simplex.vertex(1).point(),
+                     in_simplex.vertex(2).point(), in_simplex.vertex(3).point());
+}
+
+Tri_3 Convert_Simplex_To_Triangle ( ASE::Simplex in_simplex )
+{
+  return Tri_3(in_simplex.vertex(0).point(), in_simplex.vertex(1).point(),
+                  in_simplex.vertex(2).point());
 }

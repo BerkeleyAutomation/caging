@@ -41,7 +41,7 @@ ShapeFactory::CreateTriangle(TriangleConfig tri, float extrude_width)
   return pg;
 }		/* -----  end of function triangle  ----- */
 
-LineSegment ShapeFactory::CreateLine(DT_Vector3 p1, DT_Vector3 p2, float extrude_width)
+LineSegment ShapeFactory::CreateLine(Eigen::Vector3d p1, Eigen::Vector3d p2, float extrude_width)
 {
   Point_3 point1 = Point_3(p1[0], p1[1], extrude_width / 2);
   Point_3 point2 = Point_3(p2[0], p2[1], extrude_width / 2);

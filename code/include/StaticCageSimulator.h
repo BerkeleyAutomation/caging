@@ -5,7 +5,7 @@
 #include <ompl/base/StateSpace.h>
 #include <ompl/base/StateValidityChecker.h>
 
-#include <eigen3/Eigen/Core>
+#include "Typedef.h"
 
 #include "CageEscapePlanner.h"
 #include "Mesh.hpp"

@@ -22,16 +22,8 @@
 #ifndef CONF_MAPPER_H
 #define CONF_MAPPER_H
 
+#include "Typedef.h"
 
-#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-#include <CGAL/Aff_transformation_3.h>
-#include <list>
-#include <vector>
-
-typedef std::vector<double> Configuration;
-
-typedef CGAL::Exact_predicates_exact_constructions_kernel Kernel;
-typedef CGAL::Aff_transformation_3<Kernel> CGAL_Aff_Transform;
 /*
  * =====================================================================================
  *        Class:  ConfigurationMapper

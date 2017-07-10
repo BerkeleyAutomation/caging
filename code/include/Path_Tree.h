@@ -5,61 +5,7 @@
 #include "CollisionChecker.h"
 #include "ConfigurationMapper.h"
 #include "Alpha_shapes_disconnection.h"
-
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Regular_triangulation_euclidean_traits_3.h>
-#include <CGAL/Regular_triangulation_3.h>
-#include <CGAL/Union_find.h>
-#include <CGAL/Timer.h>
-#include <CGAL/utility.h>
-#include <CGAL/IO/Geomview_stream.h>
-
-#include <algorithm>
-#include <iostream>
-#include <list>
-#include <vector>
-#include <queue>
-#include <math.h>
-
-typedef std::vector<double>                                 Configuration;
-typedef std::list< Configuration >                          Path;
-typedef std::pair< Path, bool >                             Path_with_exist;
-
-
-
-
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef CGAL::Regular_triangulation_euclidean_traits_3<K>   Gt;
-typedef CGAL::Timer                                         Timer;
-
-typedef CGAL::Alpha_shape_vertex_base_3<Gt>         Vb;
-typedef CGAL::Alpha_shape_cell_base_3<Gt>           Fb;
-typedef CGAL::Triangulation_data_structure_3<Vb,Fb> Tds;
-typedef CGAL::Regular_triangulation_3<Gt,Tds>       Triangulation_3;
-
-typedef Triangulation_3::Cell_handle                        Cell_handle;
-typedef Triangulation_3::Vertex_handle                      Vertex_handle;
-typedef Triangulation_3::Facet                              Facet;
-typedef Triangulation_3::Edge                               Edge;
-typedef Gt::Weighted_point                                  Weighted_point;
-typedef Gt::Bare_point                                      Bare_point;
-
-typedef K::Tetrahedron_3                                    Tetrahedron;
-
-
-enum Alpha_Classification {DEFAULT, EMPTY, FULL, MIXED};
-
-enum Alpha_status { EXTERIOR, INTERIOR };
-
-
-typedef std::list< Cell_handle >                            Cell_path;
-typedef std::vector<Cell_handle>                            Cell_vector;
-typedef std::pair< Cell_path, Alpha_Classification >        Cell_path_with_exist;
-
-typedef CGAL::Unique_hash_map<Vertex_handle, bool>         Point_map;
-typedef CGAL::Unique_hash_map<Cell_handle, Alpha_Classification>  Cell_map;
-typedef CGAL::Unique_hash_map<Cell_handle, double>         Alpha_cell_map;
-typedef CGAL::Unique_hash_map<Facet, double>               Alpha_facet_map;
+#include "Typedef.h"
 
 class Path_Tree
 {

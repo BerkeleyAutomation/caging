@@ -3,16 +3,10 @@
  *
  * Now deprecated! This works only for SOLID library collision detection and whatnot
  */
-#include <fstream>
-#include <iostream>
-#include <stdio.h>
-#include <string>
-#include <sstream>
-#include <vector>
 
 #include <yaml-cpp/yaml.h>
-
 #include "ShapeFactory.hpp"
+#include "Typedef.h"
 
 class ConfigParser
 {

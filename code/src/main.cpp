@@ -28,6 +28,7 @@
 #include    "Mesh.hpp"
 #include    "Grasp.hpp"
 #include    "GraspGenerator.hpp"
+#include    "Util.h"
 
 #include "glui/glui.h"
 
@@ -35,13 +36,13 @@
 #include <opencv2/opencv.hpp>
 
 // FCL includes
-#include "fcl/traversal/traversal_node_bvhs.h"
-#include "fcl/traversal/traversal_node_setup.h"
-#include "fcl/collision_node.h"
-#include "fcl/collision.h"
-#include "fcl/BV/BV.h"
-#include "fcl/shape/geometric_shapes.h"
-#include "fcl/narrowphase/narrowphase.h"
+#include <fcl/traversal/traversal_node_bvhs.h>
+#include <fcl/traversal/traversal_node_setup.h>
+#include <fcl/collision_node.h>
+#include <fcl/collision.h>
+#include <fcl/BV/BV.h>
+#include <fcl/shape/geometric_shapes.h>
+#include <fcl/narrowphase/narrowphase.h>
 
 // PolyDepth includes
 #include <PQP.h>
@@ -56,14 +57,6 @@
 #define VIS
 using namespace std;
 
-//helper wait function
-void wait ( int seconds )
-{
-  clock_t endwait;
-  endwait = clock () + seconds * CLOCKS_PER_SEC ;
-  while (clock() < endwait) {}
-}
-
 // prints out usage statement
 void print_help()
 {
@@ -72,15 +65,37 @@ void print_help()
 }
 
 // save image to the mat
-cv::Mat save_image(CageChecker& cage_checker, std::string image_filename, unsigned int width = 1500, unsigned int height = 1500)
+cv::Mat save_image(CageChecker& cage_checker, std::string image_filename, float theta_offset, unsigned int width = 1500, unsigned int height = 1500)
 {
   cv::Mat image(width, height, CV_8UC3);
   image.setTo(cv::Scalar(255, 255, 255));
   cage_checker.Render_Object_Tris(image);
   cage_checker.Render_Gripper_Tris(image);
+  //But we also want to draw the direction of force 
+  Eigen::Vector2d rotation_vector(0, -((float) height)/8);
+  //Use negative theta offset since our fram of refernce for gemview flips rotations
+  rotation_vector = rotate_vector(rotation_vector, -theta_offset); 
+  cv::Point2i center_point(height/8, width/8);
+  //Note that for some odd reason, "up" is negative in OpenCV
+  cv::Point2i end_point(height/8 + rotation_vector(0), width/8 - rotation_vector(1));
+  cv::circle(image, center_point, 10, cv::Scalar(0, 255, 0), 4);
+  cv::line(image, center_point, end_point, cv::Scalar(0, 255, 0), 4);
   cv::imwrite(image_filename, image);
   return image;
 }
+
+//Version of image saving for only the object (mainly for physical experiment templates).
+cv::Mat save_image_object_only(CageChecker& cage_checker, std::string image_filename, unsigned int width = 1500, unsigned int height = 1500)
+{
+  cage_checker.Set_Object_Pose(0, 0, 0);
+  cv::Mat image(width, height, CV_8UC3);
+  image.setTo(cv::Scalar(255, 255, 255));
+  cage_checker.Render_Object_Tris(image);
+  cv::imwrite(image_filename, image);
+  return image;
+}
+
+
 
 /* 
  * ===  FUNCTION  ======================================================================
@@ -95,13 +110,23 @@ int main ( int argc, char *argv[] )
   int fake_argc = 0;
   glutInit(&argc, argv);
 
+  bool debug = false;
+
   // get args
   if (argc < 2) {
     print_help();
+    exit(0);
   }
   std::string config_filename(argv[1]);
-  //  srand(time(NULL));
+  std::string result_dir(argv[2]);
+  //The results directory must end in "/"
+  if (result_dir.at(result_dir.length() - 1) != '/') {
+    result_dir = result_dir + "/";
+  }
+
+  //srand(time(NULL));
   srand(110);
+
 
   float max_scale = -1.0f;
   if (argc > 2)
@@ -118,9 +143,6 @@ int main ( int argc, char *argv[] )
   GripperType grip_type = config.Gripper();
   std::string gripper_path = config.GripperPath();
   std::vector<std::string> object_list = config.ObjectList();
-
-  MultiObjectConfig gc = config.GripperConfig();
-  MultiObjectConfig oc = config.ObjectConfig();
 
   // render the sdfs for visualization
 #ifdef VIS
@@ -142,15 +164,27 @@ int main ( int argc, char *argv[] )
   float sample_grip_width = 2*bounding;
   float delta_jaw = 1.0f;
   float grip_inc = 2.5f;
+  //float angle_sweep = M_PI / 4.0f;
+  float angle_sweep = 0.0f / 4.0f;
+  float angle_disc = M_PI / 8.0f;
+  float max_push_force = 1.0f;
+  int num_searches = 25;
+  float rrt_range = 0.25f;
+  float rrt_vis_range = 0.25f;
+  float rrt_timeout = 120.0f;
+  float rrt_short_timeout = 30.0f;
+  float alpha = 0.7f;
   GripperConfig gripper_config;
   gripper_config.scale = 1.0f;
   gripper_config.cx = 0;
   gripper_config.cy = 0;
   gripper_config.theta = 0;
+  gripper_config.angle = 0;
   gripper_config.width = max_grip_width;
   gripper_config.sdf_filename = grip_sdf_filename.str();
   gripper_config.obj_filename = grip_obj_filename.str();
   std::vector<GripperConfig> gripper_configs;
+  gripper_configs.push_back(gripper_config);
 
   ComponentConfig object_config;
   object_config.scale = 1.0f;
@@ -158,19 +192,11 @@ int main ( int argc, char *argv[] )
   object_config.cy = 0;
   object_config.theta = 0;
 
-  // write file header
-  std::string results_filename = "caging_output.csv";
-  std::string tmp_results_filename = "caging_output.csv";
-  std::ofstream of_header(tmp_results_filename.c_str());  
-  of_header << "# CSV of caging experiments run with " << config_filename << "\n";
-  of_header << "# ObjectNum Samples Alpha CollRatio SampleTime AlphaTime IterTime TotalTime Volume PPExists Tx Ty Theta\n";
-  of_header.close();
-
   // loop through objects and number of samples, recording the values for each
   int snapshot_interval = 1;
   int num_powers = 1;
-  int num_trials = 3;
-  int num_grasps = 10;
+  int num_grasps = 1;
+  int num_grasp_trials = 1;
   int num_objects = object_list.size();
   int num_sim_trials = 10;
   int max_num_grasp_attempts = 10;
@@ -178,7 +204,6 @@ int main ( int argc, char *argv[] )
   float max_samples = config.NumSamples();
   float theta_inc = 4 * M_PI;// / 4.0f;
   float p_concave = 0.75f;
-  float timeout = 120.0f;
   unsigned int grasp_id;
   Timer timer;
   if (!random_grasps)
@@ -224,8 +249,21 @@ int main ( int argc, char *argv[] )
   object_pose.theta = object_config.theta;
 
   // create gripper
-  ParallelJawGrasp2D* gripper = new ParallelJawGrasp2D(gripper_config);
+  Mesh* gripper;
+  if (grip_type == PARALLEL_JAW) {
+    gripper = new ParallelJawGrasp2D(gripper_config);
+  }
+  else if (grip_type == RIGID) {
+    gripper = new OneFingerGrasp2D(gripper_config);
+  } 
+  else if (grip_type == QUAD){
+    gripper = new QuadGrasp2D(gripper_config);
+  }
+  else {
+    gripper = new TriGrasp2D(gripper_config);
+  }
   if (!gripper->Initialized()) {
+    LOG(INFO) << "Failed to initialize object";
     delete gripper;
     // TODO: handle
   }
@@ -236,8 +274,23 @@ int main ( int argc, char *argv[] )
   cv::Mat im2;  
 
   for (int k = 0; k < num_objects; k++) {
-    LOG(INFO) << "Testing object " << object_list[k];
-    gripper_configs.clear();
+    LOG(INFO) << "Using object " << object_list[k];
+
+    // open file
+    std::stringstream results;
+    results << object_list[k]  << "_synthesis_output.csv";
+    
+    std::string results_filename = results.str();
+    results_filename = get_filename(results_filename);
+    results_filename = result_dir +  results_filename;
+    std::ofstream of_header(results_filename.c_str());  
+    LOG(INFO) << "Saving results to " << results_filename;
+    of_header << "trial" << ", " << "gripper_width" << ", " << "pose_x"  << ", " << "pose_y" << ", " << "pose_theta" << ", "\ 
+              << "energy"  << ", "  << "norm_energy" << ", " << "void_volume" <<  ", " "void_area" << ", " << "sample_time" << ", "\ 
+              << "triangulation_time" <<  ", " <<  "filtration_time" << ", " << "persistence_time" <<  ", " \
+              << "void_time" <<  ", " << "push_direction" << ", " << "image_filename" << ", " <<  "rrt* found path" \
+              << ", " << "rrt* max energy" << ", " << "num_samples" << "\n";
+    of_header.close();
 
     // set up object config
     std::stringstream object_sdf_filename;
@@ -250,245 +303,201 @@ int main ( int argc, char *argv[] )
     object_config.obj_filename = object_obj_filename.str();
 
     // create meshes
+    LOG(INFO) << "Initializing object";
     Mesh* object = new Mesh(object_config);
     if (!object->Initialized()) {
+      LOG(INFO) << "Failed to initialize object";
       delete object;
       continue;
       // TODO: handle
     }
-    cf_config.theta_scale = object->MaxMomentArm();
-    ParallelJawGraspGenerator grasp_generator(object);
+    LOG(INFO) << "Object initialized";
+    cf_config.theta_scale = object->MaxMomentArm()*1.5f; // for numeric tolerancing
+    LOG(INFO) << "Max moment: " << object->MaxMomentArm();
+    LOG(INFO) << "Mass: " << object->Mass();    
 
-    if (!random_grasps) {
-      LoadGrasps(object_grasps_filename.str(), gripper_config, gripper_configs);
-      gripper_config = gripper_configs[0];
-      num_grasps = gripper_configs.size();
-    }
+    num_grasps = gripper_configs.size();
 
     // iterate for a number of individual grasps
     for (int g = 0; g < num_grasps; g++) {
-        int grasp_index = 0;
-        LOG(INFO) << "GRASP " << g << " of " << num_grasps;
+        LOG(INFO) << "GRASP " << g+1 << " of " << num_grasps;
 
         // get the random grasps
         float cur_samples = max_samples / std::pow(2, num_powers - 1);
 
-        if (random_grasps) {
-          int num_tries = 0;
-          bool grasp_success = grasp_generator.RandomGrasp(static_cast<ParallelJawGrasp2D*>(gripper_fingers[0]), gripper_config,
-                                                           sample_grip_width, delta_jaw, p_concave);
-          while (!grasp_success && num_tries < max_num_grasp_attempts) {
-            LOG(INFO) << "Grasp failed. Retrying...";
-            grasp_success = grasp_generator.RandomGrasp(static_cast<ParallelJawGrasp2D*>(gripper_fingers[0]), gripper_config,
-                                                        sample_grip_width, delta_jaw, p_concave);
-            num_tries++;
-          }
-          if (num_tries == max_num_grasp_attempts) {
-            LOG(INFO) << "GRASPING FAILED!";
-          }
-
-          std::stringstream random_grasps_filename;
-          random_grasps_filename << object_list[k] << "_random_grasps.txt";
-          std::ofstream rg_of(random_grasps_filename.str().c_str(), std::ios::app);  
-          rg_of << gripper_config.cx << " " << gripper_config.cy << " " << gripper_config.theta << " " << gripper_config.width << "\n";
-          rg_of.close();
-        }
-        else {
-          // just set next grasp
-          gripper_config = gripper_configs[g];
+        // set up next grasp
+        gripper_config = gripper_configs[g];
+        if (grip_type == PARALLEL_JAW) {
           static_cast<ParallelJawGrasp2D*>(gripper_fingers[0])->SetState(gripper_config);
         }
-        LOG(INFO) << "CX " << gripper_config.cx << " CY " << gripper_config.cy << " THETA " << gripper_config.theta;
+        else {
+          static_cast<OneFingerGrasp2D*>(gripper_fingers[0])->SetState(gripper_config);
+        }
+
+        // set grasp width based on object shape
+        gripper_config.width = grip_diff; //object->MaxMomentArm() / 2.0f;
+        float orig_grip_width = gripper_config.width;
+        LOG(INFO) << "CX " << gripper_config.cx << " CY " << gripper_config.cy << " THETA " << gripper_config.theta << " WIDTH " << gripper_config.width;
 
         // get the result for multiple numbers of samples
         while (cur_samples <= max_samples) {
           LOG(INFO) << "ATTEMPTING WITH " << cur_samples << " SAMPLES";
 
           // loop through angles
-          for (float d_theta = 0.0f; d_theta <= 0.0f; d_theta += theta_inc) { 
-            d_theta = gripper_config.angle;
+          for (int trial = 0; trial < num_grasp_trials; trial++) {
+            float d_theta = gripper_config.angle;
+            LOG(INFO) << "TRIAL " << trial;
             LOG(INFO) << "USING ANGLE = " << d_theta;
-
-            // iteratively open grippers (optional)
-            grip_width = gripper_config.width;
-            max_grip_width = grip_width + grip_inc;
-            while (grip_width < max_grip_width) {
+		    
+            grip_inc = orig_grip_width;
+	    grip_width = orig_grip_width;
+	    if (grip_type == PARALLEL_JAW) {
+	      //max_grip_width = 2 * object->MaxMomentArm();
+	      max_grip_width = grip_width + grip_inc; 
+	    } else {
+	      //If we're using the Zeke gripper, width iteration makes no sense!
+	      max_grip_width = grip_width + grip_inc; 
+	    }
+            int grasp_num = 0;
+	    while (grip_width < max_grip_width) {
               LOG(INFO) << "GRASP WIDTH " << grip_width;
 
-              // iteratively try the same grasp to average out random effects
-              for (int j = 0; j < num_trials; j++) {
-                LOG(INFO) << "GRASP TRIAL " << j << " of " << num_trials;
-
-                // initialize new cage checker with optional vis
-#ifdef VIS
-                CageChecker cage_checker(&gv, cf_config, object, gripper_fingers);  
-#else
-                CageChecker cage_checker(cf_config, object, gripper_fingers);  
-#endif
-                // reset poses
-                cage_checker.Set_Object_Pose(object_config.cx, object_config.cy, object_config.theta);
-                cage_checker.Set_Gripper_Pose(gripper_config.cx, gripper_config.cy, gripper_config.theta);        
-
-                // rotate world by theta for different gravity vectors
-                cage_checker.Rotate_World(d_theta);
-
-                // Pose2D p;
-                // p.x =  -0.830232;
-                // p.y =  1.93291;
-                // p.theta =    0.0559604;
-                // cage_checker.Set_Object_Pose(p.x, p.y, p.theta);
-                // float t = p.theta;
-                // if (t > M_PI) {
-                //   t = -2 * M_PI + t;
-                // }
-                // float dist_to_origin = sqrt((p.x * p.x) + (p.y * p.y) + object->MaxMomentArm() * object->MaxMomentArm() * (t * t));
-                // LOG(INFO) << "Dist origin " << dist_to_origin;
-
-                // draw the grippers
-#ifdef VIS            
-                gv.clear();
-                cage_checker.Draw_Gripper();
-                cage_checker.Draw_Object();
-#endif
-
-                // draw and save an image
-                if (j == 0){ 
-                  grasp_id = rand();
-                  std::stringstream image_filename;
-                  image_filename << "../results/icra_examples/object_" << k << "_cage_width_" << grip_width << "_" << grasp_id << "_" << d_theta << ".jpg"; 
-                  im1 = save_image(cage_checker, image_filename.str());
-                  LOG(INFO) << "Saved image to " << image_filename.str();            
-                }
-
-                // check for initial collision
-                MeshCollisionResult r = Mesh::LowerBoundCollision(object, gripper, false);
-                if (r.collision) {
-                  LOG(ERROR) << "Invalid Configuration. Initial object pose is in collision.";
-                  LOG(INFO) << "Dist " << r.distance;
-                  //                  while(true);
-                  continue;
-                }
-                else {
-                  LOG(INFO) << "No collision";
-                }
-                
-                // init results
-                CageResult cage_result;
-                SimulationResult sr;
-                PathPlanningResult ppr;              
-
-                LOG(INFO) << "Object mass: " << object->Mass();
-                LOG(INFO) << "Object moment arm: " << object->MaxMomentArm();
-
-                // check for a cage
-                LOG(INFO) << "Checking cage with " << cur_samples << " samples on trial " << j;
-                timer.reset();
-                timer.start();
-                energy_config.num_samples = cur_samples;
-                cage_result = cage_checker.Check_Cage(energy_config);
-                timer.stop();
-                LOG(INFO) << "Object caged?: " << !(cage_result.energy_result.path_exists);
-                LOG(INFO) << "Cage energy: " << cage_result.energy_result.energy;
-                LOG(INFO) << "Normalized energy: " << cage_result.energy_result.normalized_energy;
-
-                // simulate to get empirical cage ratio
-                cage_checker.Set_Object_Pose(object_config.cx, object_config.cy, object_config.theta);
-                cage_checker.Set_Gripper_Pose(gripper_config.cx, gripper_config.cy, gripper_config.theta);        
-                cage_checker.Rotate_World(d_theta);
-                timer.reset();
-                timer.start();
-                sr = cage_checker.Ratio_Escape_Paths(object_config.cx, object_config.cy, object_config.theta,
-                                                     num_sim_trials, -cage_result.energy_result.energy);
-                timer.stop();
-                LOG(INFO) << "Thresholded cage ratio: " << sr.cage_rate;
-                LOG(INFO) << "Raw cage ratio: " << sr.raw_cage_rate;
-                LOG(INFO) << "Simulation took (sec): " << timer.time();
-
-                // check for an escape path with rrt
-                cage_checker.Set_Object_Pose(object_config.cx, object_config.cy, object_config.theta);
-                cage_checker.Set_Gripper_Pose(gripper_config.cx, gripper_config.cy, gripper_config.theta);        
-                cage_checker.Rotate_World(d_theta);
-
-                Eigen::Matrix4f obj_pose = object->Pose();
-                float gx, gy, gtheta;
-                Pose3DToParams2D(obj_pose, gx, gy, gtheta);
-                
-                LOG(INFO) << "Planning escape path";
-                timer.reset();
-                timer.start();
-                float range = 0.025f;
-                ppr = cage_checker.Find_Escape_Path(gx, gy, gtheta,
-                                                    std::max<float>(0.0f, -cage_result.energy_result.energy),
-                                                    timeout, range);
-                timer.stop();
-                LOG(INFO) << "Object able to escape?: " << ppr.path_exists;
-                LOG(INFO) << "Escape Energy: " << ppr.max_energy << " at state " << ppr.max_state;
-                LOG(INFO) << "Planning took (sec): " << timer.time();
-
-                // visualization
-                if (ppr.path_exists) {
-                  for (unsigned int a = 0; a < ppr.states.size(); a++) {
-                    cage_checker.Set_Object_Pose(ppr.states[a](0), ppr.states[a](1), ppr.states[a](2));
-                    r = Mesh::UpperBoundCollision(object, gripper, false);
-                    if (r.collision) {
-                      LOG(INFO) << "Collision at state " << a;
-                    }
-
-#ifdef VIS
-                    if (a % 5 == 0)
-                      LOG(INFO) << "State " << a << ": " << ppr.states[a](0) << " " << ppr.states[a](1) << " " << ppr.states[a](2);
-
-                    gv.clear();
-                    cage_checker.Draw_Gripper();
-                    cage_checker.Draw_Object();
-                    boost::this_thread::sleep(boost::posix_time::seconds(0.25f));
-#endif
-
-                    if (a == ppr.max_state || (abs((int)a - (int)ppr.max_state) < 10 && a % 2 == 0)) {
-                      std::stringstream image_filename;
-                      image_filename << "../results/icra_examples/object_" << k << "_cage_width_" << grip_width << "_" << grasp_id << "_path_state_" << a << ".jpg"; 
-                      im2 = save_image(cage_checker, image_filename.str());
-
-                      if (a == ppr.max_state) {
-                        float alpha = 0.7f;
-                        cv::addWeighted(im1, alpha, im2, 1.0 - alpha, 0.0, im2);
-                        std::stringstream image_filename2;
-                        image_filename2 << "../results/icra_examples/object_" << k << "_cage_width_" << grip_width << "_" << grasp_id << "_path_state_translucent_" << a << ".jpg"; 
-                        cv::imwrite(image_filename2.str(), im2);
-                      }                      
-                      LOG(INFO) << "Saved image to " << image_filename.str();            
-                    }
-                  }
-                }
-
-                // save results of the run
-                txs.push_back(gripper_config.cx);
-                tys.push_back(gripper_config.cy);
-                thetas.push_back(gripper_config.theta);
-                d_thetas.push_back(d_theta);
-                all_grip_widths.push_back(grip_width);
-                samples.push_back(cur_samples);
-                cage_results.push_back(cage_result);
-                planned_path_results.push_back(ppr);
-                simulation_results.push_back(sr);
-                times.push_back(timer.time());
-                objects.push_back(k);
-                grasp_ids.push_back(grasp_id);
-                grasp_index++;
-
-                if (grasp_index % snapshot_interval == 0) {
-                  // write the result to file
-                  std::ofstream of(tmp_results_filename.c_str(), std::ios::app);  
-                  for (unsigned int j = txs.size() - snapshot_interval; j < samples.size(); j++) {
-                    of << objects[j] << ", " << grasp_ids[j] << ", " << samples[j] << ", " << cage_results[j].energy_result.energy << ", " << cage_results[j].energy_result.normalized_energy << \
-                      ", " << cage_results[j].total_time << ", " << cage_results[j].energy_result.sample_time << ", " << cage_results[j].energy_result.triangulation_time << \
-                      ", " << cage_results[j].energy_result.iter_time << ", " << planned_path_results[j].path_exists << ", " << planned_path_results[j].max_energy << ", " << simulation_results[j].cage_rate << ", " << simulation_results[j].raw_cage_rate << \
-                      ", " << txs[j] << ", " << tys[j] << ", " << thetas[j] << ", " << d_thetas[j] << ", " << all_grip_widths[j] << "\n";
-                  }
-                  of.close();
-                }
+              //Update width of the grippers that we use...
+	      gripper_config.width = grip_width;
+              if (grip_type == PARALLEL_JAW) {
+                static_cast<ParallelJawGrasp2D*>(gripper_fingers[0])->SetState(gripper_config);
               }
+              else {
+                static_cast<OneFingerGrasp2D*>(gripper_fingers[0])->SetState(gripper_config);
+              }
+              
+              // initialize new cage checker with optional vis
+#ifdef VIS
+              CageChecker cage_checker(&gv, cf_config, object, gripper_fingers);  
+#else
+              CageChecker cage_checker(cf_config, object, gripper_fingers);  
+#endif
+              // reset poses
+              if (!debug) {
+                cage_checker.Set_Object_Pose(object_config.cx, object_config.cy, object_config.theta);
+              }
+              cage_checker.Set_Gripper_Pose(gripper_config.cx, gripper_config.cy, gripper_config.theta);        
+
+              // rotate world by theta for different gravity vectors
+              cage_checker.Rotate_World(d_theta);
+              
+              // draw the grippers
+#ifdef VIS
+              gv.clear();
+              cage_checker.Draw_Gripper();
+              cage_checker.Draw_Object();
+#endif        
+	      ////OUR CORE ALGORITHM LIVES HERE 
+	      timer.reset();
+              timer.start();
+              energy_config.num_samples = cur_samples;
+              //Checking this doesn't make sense with the quad gripper because of complete cages.
+	      bool check_reachability = grip_type != QUAD; 
+	      std::vector< std::vector<synthesis_info> > all_poses =  \
+                cage_checker.synthesize_grasps(energy_config, num_searches, 
+					       angle_sweep, angle_disc, check_reachability, max_push_force);
+              timer.stop();
+              
+	      //LET's SAVE SOME RESULTS	
+              // write file header
+ 
+	      std::ofstream of(results_filename.c_str(), std::ios::app);  	
+	      
+	      for (int r = 0; r < all_poses.size(); r++) { 
+	        std::vector<synthesis_info> extracted_poses = all_poses[r];
+
+	        for (unsigned int j = 0 ; j < extracted_poses.size(); j++) { 
+		  float seen_rot = roundf(extracted_poses[j].get_rotation() * 100)/100;
+	          std::ostringstream ss;
+	          ss << object_list[k] << "_rot_" << seen_rot <<  "_grasp_" << grasp_num << "_" << j\
+                     << "_width_" << grip_width << "_.png";
+	          std::string pic_string = ss.str();
+	          pic_string = get_filename(pic_string);
+	          pic_string = result_dir + pic_string; 
+	          Pose2D cur_pose;
+	          cur_pose = extracted_poses[j].get_pose();
+                  float delta_lower_bound = extracted_poses[j].get_delta();
+                  float energy_dir = extracted_poses[j].get_rotation();
+
+                  cage_checker.Set_Object_Pose(cur_pose.x, cur_pose.y, cur_pose.theta);
+                  gv.clear();
+                  cage_checker.Draw_Gripper();
+                  cage_checker.Draw_Object();
+	          
+                  //DRAW THE BIRTH POSE 
+	          ss << object_list[k] << "_BIRTH" << "_rot_" << seen_rot <<  "_grasp_" << grasp_num << "_" << j\
+                     << "_width_" << grip_width << "_.png";
+	          std::string birth_string = ss.str();
+	          birth_string = get_filename(birth_string);
+	          birth_string = result_dir + birth_string; 
+	          Pose2D birth_pose;
+	          birth_pose = extracted_poses[j].get_birth_pose();
+		  cage_checker.Set_Object_Pose(birth_pose.x, birth_pose.y, birth_pose.theta);
+		  save_image(cage_checker, birth_string, extracted_poses[j].get_rotation());
+		  
+		  //Check in case the algorithm gives ys a bad bound or bad cage...
+		  cage_checker.Set_Object_Pose(cur_pose.x, cur_pose.y, cur_pose.theta);
+                  PathPlanningResult ppr;  //= cage_checker.Upper_Bound_Escape_Energy(cur_pose.x, cur_pose.y, cur_pose.theta,
+                  //                                                                 std::max<float>(0.0f,
+                  //                                                                                delta_lower_bound),
+                  //                                                                energy_dir,
+                  //                                                                rrt_timeout, rrt_range, max_push_force);
+                  //
+                  //LOG(INFO) << "Object able to escape?: " << ppr.path_exists;
+                  //LOG(INFO) << "Escape Energy: " << ppr.max_energy << " at state " << ppr.max_state;
+                  //LOG(INFO) << "Normalized Escape Energy: " << ppr.normalized_max_energy << " at state " << ppr.max_state;
+
+                  //// visualization
+                  //if (ppr.path_exists) {
+                  //  for (unsigned int a = 0; a < ppr.states.size(); a++) {
+                  //    cage_checker.Set_Object_Pose(ppr.states[a](0), ppr.states[a](1), ppr.states[a](2));
+                  //    MeshCollisionResult r = Mesh::LowerBoundCollision(object, gripper, false);
+                  //    if (r.collision) {
+                  //      LOG(INFO) << "Collision at state " << a;
+                  //    }
+
+                  //    if (a % 1 == 0)
+                  //      LOG(INFO) << "State " << a << ": " << ppr.states[a](0) << " " << ppr.states[a](1) << " " << ppr.states[a](2);
+
+                  //    gv.clear();
+                  //    cage_checker.Draw_Gripper();
+                  //    cage_checker.Draw_Object();
+                  //    boost::this_thread::sleep(boost::posix_time::seconds(1.0f));
+
+                  //    std::stringstream image_filename;
+                  //    image_filename << "state_" << a << ".png";
+		  //      
+                  //    std::string pic_string2 = image_filename.str();
+                  //    pic_string2 = get_filename(pic_string2);
+                  //    pic_string2 = result_dir + pic_string2; 
+                  //    im2 = save_image(cage_checker, pic_string2, energy_dir);                  
+                  //  }
+                  //}
+
+		  //Write to reults .csv
+		  of << trial << ", " << grip_width << ", " << cur_pose.x << ", " << cur_pose.y << ", " << cur_pose.theta << ", " << extracted_poses[j].get_delta() \
+                     << ", " << extracted_poses[j].get_norm_delta() << ", " << extracted_poses[j].get_void_volume() << ", " << extracted_poses[j].v_area_ << ", " << extracted_poses[j].get_sample_time() \
+                     << ", " << extracted_poses[j].get_triangulation_time() <<  ", "\
+                     << extracted_poses[j].get_filtration_time() << ", " << extracted_poses[j].get_persistence_time()\
+                     <<  ", " << extracted_poses[j].get_void_time() << ", " << extracted_poses[j].get_rotation()\
+                     << ", " << pic_string << ", " << ppr.path_exists << ", " << ppr.max_energy << ", " << cur_samples << "\n";
+
+	        
+	          //Also write out pictures for each grasp...
+		  cage_checker.Set_Object_Pose(cur_pose.x, cur_pose.y, cur_pose.theta);
+		  im1 = save_image(cage_checker, pic_string, extracted_poses[j].get_rotation());
+
+                }
+	      }              
+	      of.close();
+
               grip_width = grip_width + grip_inc;
+	      grasp_num++;
             }
           }
           cur_samples = cur_samples * 2;
@@ -496,19 +505,7 @@ int main ( int argc, char *argv[] )
     }
     delete object;
   }
-
-
-  // write all results to file
-  std::ofstream of(results_filename.c_str());  
-  of << "# CSV of caging experiments run with " << config_filename << "\n";
-  of << "# ObjectNum Samples Alpha CollRatio SampleTime AlphaTime IterTime TotalTime Volume Tx Ty Theta\n";
-  for (unsigned int j = 0; j < samples.size(); j++) {
-    of << objects[j] << ", " << grasp_ids[j] << ", " << samples[j] << ", " << cage_results[j].energy_result.energy << ", " << cage_results[j].energy_result.normalized_energy << \
-      ", " << cage_results[j].total_time << ", " << cage_results[j].energy_result.sample_time << ", " << cage_results[j].energy_result.triangulation_time << \
-      ", " << cage_results[j].energy_result.iter_time << ", " << planned_path_results[j].path_exists << ", " << planned_path_results[j].max_energy << ", " << simulation_results[j].cage_rate << ", " << simulation_results[j].raw_cage_rate << \
-      ", " << txs[j] << ", " << tys[j] << ", " << thetas[j] << ", " << d_thetas[j] << ", " << all_grip_widths[j] << "\n";
-  }
-  of.close();
+  delete gripper;
 
   return EXIT_SUCCESS;
 }

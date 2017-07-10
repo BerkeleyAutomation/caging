@@ -1,6 +1,5 @@
 #include "PotentialFunction.h"
-
-double GravityPotential::GRAVITY_ACCEL = 9.81f;
+#include "Util.h"
 
 bool compare(Bare_point p0, Bare_point p1) {
   if (fabs(p0.x() - p1.x()) < 1e-2 && 
@@ -11,17 +10,26 @@ bool compare(Bare_point p0, Bare_point p1) {
   return false;
 }
 
-GravityPotential::GravityPotential(ASE::Vertex reference_pose, double mass,
-                                   float x_scale, float y_scale, float theta_scale)
+LinearPotentialFunction::LinearPotentialFunction(ASE::Vertex reference_pose, double push_force,
+                                                 float x_scale, float y_scale, float theta_scale,
+                                                 float theta_offset)
   : reference_pose_(reference_pose),
-    mass_(mass),
+    push_force_(push_force),
     x_scale_(x_scale),
     y_scale_(y_scale),
     theta_scale_(theta_scale)
 {
+  Eigen::Vector2d unit_down(-1, 0);
+  force_vector_ = rotate_vector(unit_down, theta_offset);
 }
 
-Potential GravityPotential::evaluate(ASE::Simplex simplex)
+
+Eigen::Vector2d LinearPotentialFunction::get_force_vector()
+{
+  return force_vector_;
+}
+
+Potential LinearPotentialFunction::evaluate(ASE::Simplex simplex)
 {
   // take min gravitational potential over the vertices
   Potential min_energy = FLT_MAX;
@@ -35,10 +43,16 @@ Potential GravityPotential::evaluate(ASE::Simplex simplex)
   return min_energy;
 }
 
-Potential GravityPotential::potential(ASE::Vertex vertex)
+
+Potential LinearPotentialFunction::potential(ASE::Vertex vertex)
 {
-  return mass_ * GRAVITY_ACCEL * (vertex.x() - reference_pose_.x()) / y_scale_;
+  Eigen::Vector2d vertex_vector(vertex.x(), vertex.y());
+  Eigen::Vector2d reference_vector(reference_pose_.x(), reference_pose_.y());
+  Eigen::Vector2d difference_vector = reference_vector -  vertex_vector;
+  double height = difference_vector.dot(force_vector_);
+  return push_force_ * height / y_scale_;
 }
+
 
 DistancePotential::DistancePotential(ASE::Vertex reference_pose,
                                    float x_scale, float y_scale, float theta_scale)

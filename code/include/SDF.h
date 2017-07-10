@@ -5,18 +5,7 @@
 #ifndef SDF_H
 #define SDF_H
 
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <vector>
-
-#include <opencv2/opencv.hpp>
-
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Dense>
-
-#include <CGAL/Timer.h>
-typedef CGAL::Timer Timer;
+#include "Typedef.h"
 
 class SDFCollisionCache;
 

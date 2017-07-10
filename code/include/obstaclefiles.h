@@ -19,26 +19,8 @@
 #ifndef OBSTACLE_FILES_H
 #define OBSTACLE_FILES_H
 
-#include <list>
-#include <set>
-#include <vector>
-#include <math.h>
-#include <CGAL/random_polygon_2.h>
-#include <CGAL/point_generators_2.h>
-#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-#include <CGAL/Polyhedron_3.h>
-#include <CGAL/Aff_transformation_3.h>
-#include <CGAL/Polygon_2.h>
-#include <CGAL/Polyhedron_incremental_builder_3.h>
 #include "PRM.h"
-
-typedef CGAL::Exact_predicates_exact_constructions_kernel Kernel;
-typedef CGAL::Polyhedron_3<Kernel> Polyhedron;
-typedef CGAL::Polygon_2<Kernel> Polygon;
-typedef Polyhedron::HalfedgeDS HalfedgeDS;
-typedef Kernel::Point_2 Point_2;
-typedef Kernel::Point_3 Point_3;
-typedef CGAL::Aff_transformation_3<Kernel> CGAL_Aff_Transform;
+#include "Typedef.h"
 
 /* 
  * ===  FUNCTION  ======================================================================

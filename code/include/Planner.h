@@ -21,13 +21,7 @@
 #ifndef PLANNER_H
 #define PLANNER_H
 
-#include <list>
-#include <vector>
-
-typedef std::vector<double>                                 Configuration;
-typedef std::list< Configuration >                          Path;
-typedef std::pair< Path, bool >                             Path_with_exist;
-
+#include "Typedef.h"
 
 /*
  * =====================================================================================

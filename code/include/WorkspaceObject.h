@@ -19,26 +19,10 @@
 #ifndef WORKSPACE_OBJ_H
 #define WORKSPACE_OBJ_H
 
-#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-#include <CGAL/Polyhedron_3.h>
-#include <CGAL/Nef_polyhedron_3.h>
-#include <CGAL/IO/Nef_polyhedron_iostream_3.h>
-#include <CGAL/Nef_3/SNC_indexed_items.h>
-#include <CGAL/convex_decomposition_3.h> 
 #include "Polyhedron_iostream.h"
+#include "Typedef.h"
 #include "ShapeFactory.hpp"
-#include <CGAL/Aff_transformation_3.h>
-#include <list>
-#include <vector>
-#include <algorithm>
 
-
-
-typedef CGAL::Exact_predicates_exact_constructions_kernel Kernel;
-typedef CGAL::Polyhedron_3<Kernel> Polyhedron_3;
-typedef CGAL::Aff_transformation_3<Kernel> CGAL_Aff_Transform;
-typedef CGAL::Nef_polyhedron_3<Kernel, CGAL::SNC_indexed_items> Nef_polyhedron_3;
-typedef Nef_polyhedron_3::Volume_const_iterator Volume_const_iterator;
 
 /*
  * =====================================================================================

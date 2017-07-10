@@ -8,20 +8,16 @@ ConfigParser::ConfigParser(std::string filename) : config_filename_(filename)
 // Parses the YAML config file
 bool ConfigParser::Parse()
 {
-  std::ifstream yaml_in(config_filename_.c_str());
-  YAML::Parser parser(yaml_in);
-  YAML::Node node;
+  YAML::Node node = YAML::LoadFile(config_filename_.c_str());
 
   // attempt to parse config
   // NOTE: assumes given keys are there
   try {
-    parser.GetNextDocument(node);
-
     // get constants
-    node["extrusion"] >> extrusion_;
-    node["bounding"] >> bounding_;
-    node["debug"] >> debug_;
-    node["samples"] >> num_samples_;
+    extrusion_ = node["extrusion"].as<float>();
+    bounding_ = node["bounding"].as<float>();
+    debug_ = node["debug"].as<bool>();
+    num_samples_ = node["samples"].as<unsigned int>();
 
     // get gripper subnode
     const YAML::Node& grip_subnode = node["gripper"];
@@ -58,11 +54,11 @@ void ConfigParser::ParseCompositeConfig(const YAML::Node& node, CompositeObjectC
   // parse boxes
   for (unsigned int i = 0; i < node["boxes"].size(); i++) {
     BoxConfig box;
-    node["boxes"][i]["width"] >> box.width;
-    node["boxes"][i]["height"] >> box.height;
-    node["boxes"][i]["cx"] >> box.cx;
-    node["boxes"][i]["cy"] >> box.cy;
-    node["boxes"][i]["theta"] >> box.theta;
+    box.width = node["boxes"][i]["width"].as<float>();
+    box.height = node["boxes"][i]["height"].as<float>();
+    box.cx = node["boxes"][i]["cx"].as<float>();
+    box.cy = node["boxes"][i]["cy"].as<float>();
+    box.theta = node["boxes"][i]["theta"].as<float>();
     comp_config.boxes.push_back(box);
   }
 
@@ -70,10 +66,10 @@ void ConfigParser::ParseCompositeConfig(const YAML::Node& node, CompositeObjectC
   std::vector<TriangleConfig> tri_configs;
   for (unsigned int i = 0; i < node["triangles"].size(); i++) {
     TriangleConfig tri;
-    node["triangles"][i]["scale"] >> tri.scale;
-    node["triangles"][i]["cx"] >> tri.cx;
-    node["triangles"][i]["cy"] >> tri.cy;
-    node["triangles"][i]["theta"] >> tri.theta;
+    tri.scale = node["triangles"][i]["scale"].as<float>();
+    tri.cx = node["triangles"][i]["cx"].as<float>();
+    tri.cy = node["triangles"][i]["cy"].as<float>();
+    tri.theta = node["triangles"][i]["theta"].as<float>();
     comp_config.tris.push_back(tri);
   }
 }

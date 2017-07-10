@@ -35,26 +35,23 @@
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Timer.h>
 
-// SOLID includes
-#include <SOLID/SOLID.h>
-#include <SOLID/MT_Point3.h>
-#include <SOLID/MT_Vector3.h>
-
 // PolyDepth includes
 #include <PQP.h>
 #include <C2A/LinearMath.h>
 #include <C2A/C2A.h>
 #include <PolyDepth/PolyDepth.h>
 #include <PolyDepth/MeshObject.h>
+#undef max
+#undef min
 
 // FCL includes
-#include "fcl/traversal/traversal_node_bvhs.h"
-#include "fcl/traversal/traversal_node_setup.h"
-#include "fcl/collision_node.h"
-#include "fcl/collision.h"
-#include "fcl/BV/BV.h"
-#include "fcl/shape/geometric_shapes.h"
-#include "fcl/narrowphase/narrowphase.h"
+#include <fcl/traversal/traversal_node_bvhs.h>
+#include <fcl/traversal/traversal_node_setup.h>
+#include <fcl/collision_node.h>
+#include <fcl/collision.h>
+#include <fcl/BV/BV.h>
+#include <fcl/shape/geometric_shapes.h>
+#include <fcl/narrowphase/narrowphase.h>
 
 // Eigen includes
 #include <eigen3/Eigen/Core>

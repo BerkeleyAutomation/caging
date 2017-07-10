@@ -1,11 +1,19 @@
 #include "Connectivity_Checker.h"
 
-#include <glog/logging.h>
+#include "Util.h"
 
-Connectivity_Checker::Connectivity_Checker(Triangulation_3& raw_triangulation, Filtration_3& filtration, CGAL::Geomview_stream& gv, Potential potential_thresh)
+#include <glog/logging.h>
+#include <queue>
+
+Connectivity_Checker::Connectivity_Checker(Triangulation_3& raw_triangulation,
+                                           Filtration_3& filtration,
+                                           CGAL::Geomview_stream& gv,
+                                           Potential potential_thresh,
+                                           bool cache_connected_components)
   : triangulation_(raw_triangulation),
     filtration_(filtration),
     potential_thresh_(potential_thresh),
+    cache_connected_components_(cache_connected_components),
     gv_(gv)
 {
   set_potential(potential_thresh_);
@@ -15,9 +23,11 @@ void Connectivity_Checker::set_potential(Potential p)
 {
   potential_thresh_ = p;
   filtration_.set_potential(potential_thresh_);
-  LOG(INFO) << "Set filtration potential to " << potential_thresh_;
-  reset_classification();
-  LOG(INFO) << "Reset classification";
+  //LOG(INFO) << "Set filtration potential to " << potential_thresh_;
+  if (cache_connected_components_) {
+    reset_classification();
+    //LOG(INFO) << "Reset classification";
+  }
 }
 
 void Connectivity_Checker::reset_classification()
@@ -77,7 +87,8 @@ void Connectivity_Checker::compute_connected_components()
       // LOG(INFO) << "Is Cell " << triangulation_.is_cell(current_neighbor);
       
       // check if neighbor is an exterior cell
-      if (!triangulation_.is_infinite(current_neighbor) && filtration_.classify(current_neighbor) == ASE::EXTERIOR) {
+      if (!triangulation_.is_infinite(current_neighbor) && filtration_.classify(current_neighbor) == ASE::EXTERIOR &&
+          filtration_.classify(current_cell, current_neighbor) == ASE::EXTERIOR) {
 
         // if it is, join the set with the infinite set
         disjoint_set_.unify_sets(map_[current_cell], map_[current_neighbor]);
@@ -91,7 +102,146 @@ void Connectivity_Checker::compute_connected_components()
   timer_.reset();
 }
 
-bool Connectivity_Checker::connected(Bare_point qs, Bare_point qg, Potential potential)
+
+std::vector<ASE::Simplex> Connectivity_Checker::connected_component(Bare_point bp)
+{
+  return connected_component(bp, potential_thresh_);
+}
+
+std::vector<ASE::Simplex> Connectivity_Checker::connected_component(Bare_point bp, Potential potential)
+{  
+  
+  Locate_type cs_lt;
+  int cs_li, cs_lj;
+  Cell_handle query_cell;
+  query_cell = triangulation_.locate(bp, cs_lt, cs_li, cs_lj); // find start cell
+
+  std::vector<ASE::Simplex>  cc_triangulation;
+
+  // set potential
+  if (potential != potential_thresh_) {
+    set_potential(potential);
+  }
+
+  // check valid initial cell
+  if (triangulation_.is_infinite(query_cell)) {
+    LOG(INFO) << "Query cell is infinite";
+    return cc_triangulation;
+  }
+
+  if (filtration_.classify(query_cell) != ASE::EXTERIOR) {
+    LOG(INFO) << "Query cell is not in exterior of current subcomplex";
+    return cc_triangulation;
+  }
+
+  // check connectivity of exterior_cells using region growing (BFS)
+  Cell_handle cur_cell;
+  Cell_handle cur_neighbor;
+  std::set<Cell_handle> checked_cells;
+  std::queue<Cell_handle> cells_to_process;
+  cells_to_process.push(query_cell);
+  checked_cells.insert(query_cell);
+  while (cells_to_process.size() > 0) {
+    // get front cell
+    cur_cell = cells_to_process.front();
+    cells_to_process.pop();
+
+    // add to triangulation if valid
+    if (!triangulation_.is_infinite(cur_cell) &&
+        filtration_.classify(cur_cell) == ASE::EXTERIOR) {
+      ASE::Simplex s;
+      filtration_.simplex(cur_cell, s);
+      cc_triangulation.push_back(s);
+    }
+
+    // add all valid neighbors to check set
+    for (int neighbor = 0; neighbor <= 3; neighbor++) {
+      cur_neighbor = cur_cell->neighbor(neighbor); // get cur neighbor
+
+      // add neighbor to query set if separating simplex is valid
+      if (filtration_.classify(cur_cell, cur_neighbor) == ASE::EXTERIOR &&
+          checked_cells.find(cur_neighbor) == checked_cells.end() ) {
+        cells_to_process.push(cur_neighbor);
+        checked_cells.insert(cur_neighbor);
+      }
+    }
+  }
+
+  // add points to triangulation
+  return cc_triangulation;
+}
+
+
+bool Connectivity_Checker::render_cc_path(Bare_point qs, Bare_point qg, Potential potential)
+{ 
+  std::vector<Cell_handle> start_cells;
+  std::vector<Cell_handle> goal_cells;
+
+  if (!set_goal_start_cells(qs, qg, potential, start_cells, goal_cells)) {
+    return false;
+  }
+  
+  std::map<Cell_handle, Cell_handle> closed_set; //map converts cell_handles from location queries to ds structure handles
+  Cell_handle found_goal;
+  int i;
+  for (i = 0; i < start_cells.size(); i++) {
+    
+    closed_set.clear();
+    //Bit of a hack, but we never follow the original cell's backpointer...should be OK!
+    closed_set.insert(std::pair<Cell_handle, Cell_handle>(start_cells[i], start_cells[i]));
+    if (Cell_DFS(start_cells[i], closed_set, found_goal, goal_cells)) { 
+      Cell_handle plotted_cell = found_goal;
+      //Follow "backpinters" incooreperated into closed set to visualize path...
+      gv_ << CGAL::GREEN;
+      while (plotted_cell != start_cells[i]) {
+        gv_ << Convert_Cell_To_Tetrahedron(plotted_cell);
+        plotted_cell = closed_set[plotted_cell];
+      }
+      gv_ << CGAL::RED;
+      gv_ << Convert_Cell_To_Tetrahedron(plotted_cell);
+      
+      return true;
+    }
+  }
+
+  return false;  
+}
+
+
+
+bool Connectivity_Checker::Cell_DFS(Cell_handle cur_cell, std::map<Cell_handle, Cell_handle>& closed_set, 
+Cell_handle& found_goal, std::vector<Cell_handle>& goal_cells)
+{
+  for (int i = 0; i < goal_cells.size(); i++) {
+    if (goal_cells[i] == cur_cell) {
+      found_goal = goal_cells[i];
+      return true;
+    }
+  }
+
+  
+  for (int neighbor = 0; neighbor <= 3; neighbor++) { // iterate over all 4 neighbors
+    Cell_handle current_neighbor = cur_cell->neighbor(neighbor); // get current neighbor
+  
+    // check if neighbor is an exterior cell
+    if (!triangulation_.is_infinite(current_neighbor) && filtration_.classify(current_neighbor) == ASE::EXTERIOR
+        && filtration_.classify(cur_cell, current_neighbor) == ASE::EXTERIOR 
+        && closed_set.count(current_neighbor) == 0) {
+      closed_set.insert(std::pair<Cell_handle, Cell_handle>(current_neighbor, cur_cell));
+      if (Cell_DFS(current_neighbor, closed_set, found_goal, goal_cells)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+} 
+
+
+
+bool Connectivity_Checker::set_goal_start_cells(Bare_point qs, Bare_point qg, Potential potential, 
+ 						std::vector<Cell_handle>& start_cells,
+  						std::vector<Cell_handle>& goal_cells)
 {
   // set potential
   if (potential != potential_thresh_) {
@@ -99,6 +249,8 @@ bool Connectivity_Checker::connected(Bare_point qs, Bare_point qg, Potential pot
   }
 
   //  timer_.start();
+
+  LOG(INFO) << "Starting" << std::endl;
 
   // locate the start and goal cells
   Locate_type cs_lt, cg_lt;
@@ -118,16 +270,17 @@ bool Connectivity_Checker::connected(Bare_point qs, Bare_point qg, Potential pot
     return false;
   }
 
-  std::vector<Cell_handle> start_cells;
-  std::vector<Cell_handle> goal_cells;
+  LOG(INFO) << "Init" << std::endl;
+
   std::vector<Cell_handle> incident_cells;
 
   // search through all possible pairs of neighboring cells to the start point if located on a vertex
   //  LOG(INFO) << "Start point " << qs;
+  LOG(INFO) << "Start loc" << std::endl;
   if (cs_lt == Triangulation_3::VERTEX) {
     Vertex_handle vh = cs->vertex(cs_li);
     triangulation_.incident_cells(vh, std::back_inserter(incident_cells));
-    // LOG(INFO) << "Start vertex ";
+    LOG(INFO) << "Start vertex ";
 
     for (unsigned int i = 0; i < incident_cells.size(); i++) {
       if (triangulation_.is_cell(incident_cells[i]) && filtration_.classify(incident_cells[i]) == ASE::EXTERIOR) {
@@ -160,7 +313,7 @@ bool Connectivity_Checker::connected(Bare_point qs, Bare_point qg, Potential pot
   }
 
   incident_cells.clear();
-  // LOG(INFO) << "Goal point " << qg;
+  LOG(INFO) << "Goal point " << qg;
   // search through all possible pairs of neighboring cells to the goal point if located on a vertex
   if (cg_lt == Triangulation_3::VERTEX) {
     Vertex_handle vh = cg->vertex(cg_li);
@@ -197,15 +350,34 @@ bool Connectivity_Checker::connected(Bare_point qs, Bare_point qg, Potential pot
     LOG(INFO) << "Error: Goal point is on an edge or facet"; 
     return false;
   }
+
+  return true;
+}
+
+
+bool Connectivity_Checker::connected(Bare_point qs, Bare_point qg, Potential potential)
+{
+  if (!cache_connected_components_) {
+    reset_classification();
+  }
+
+  std::vector<Cell_handle> start_cells;
+  std::vector<Cell_handle> goal_cells;
+
+  if (!set_goal_start_cells(qs, qg, potential, start_cells, goal_cells)) {
+    return false;
+  }
   
   // check all connectivity of all possible goals against all possible starts
   bool same_set = false;
+  LOG(INFO) << "Same sets" << std::endl;
   for (unsigned int i = 0; i < !same_set && goal_cells.size(); i++) {
     for (unsigned int j = 0; j < !same_set && start_cells.size(); j++) {
-      // gv_ << CGAL::RED;
-      // gv_ << Convert_Cell_To_Tetrahedron(goal_cells[i]);
-      // gv_ << CGAL::GREEN;
-      // gv_ << Convert_Cell_To_Tetrahedron(start_cells[j]);
+      LOG(INFO) << "Checking " << i << " " << j << std::endl;
+      gv_ << CGAL::DEEPBLUE;
+      //gv_ << Convert_Cell_To_Tetrahedron(goal_cells[i]);
+      gv_ << CGAL::WHITE;
+      //gv_ << Convert_Cell_To_Tetrahedron(start_cells[j]);
       same_set = disjoint_set_.same_set(map_[goal_cells[i]], map_[start_cells[j]]);      
     }
   }

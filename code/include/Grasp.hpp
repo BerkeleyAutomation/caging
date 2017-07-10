@@ -41,6 +41,36 @@ private:
   GripperConfig config_;
 };
 
+class QuadGrasp2D : public Mesh
+{
+ public:
+  // object containing pose, width, and filename for obj and sdfs
+  QuadGrasp2D(GripperConfig config); 
+  ~QuadGrasp2D() {}
+
+public:
+  //  static void EndpointsToGrasp(ASE::Vertex2d g1, ASE::Vertex2d g2, GripperConfig& config);
+  void SetState(GripperConfig config);
+
+private:
+  GripperConfig config_;
+};
+
+class TriGrasp2D : public Mesh
+{
+ public:
+  // object containing pose, width, and filename for obj and sdfs
+  TriGrasp2D(GripperConfig config); 
+  ~TriGrasp2D() {}
+
+public:
+  //  static void EndpointsToGrasp(ASE::Vertex2d g1, ASE::Vertex2d g2, GripperConfig& config);
+  void SetState(GripperConfig config);
+
+private:
+  GripperConfig config_;
+};
+
 class OneFingerGrasp2D : public Mesh
 {
  public:

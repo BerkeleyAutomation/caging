@@ -13,8 +13,7 @@
 #include <CGAL/Polygon_2.h>
 #include <CGAL/Polyhedron_incremental_builder_3.h>
 
-#include <SOLID/SOLID.h>
-#include <SOLID/MT_Scalar.h>
+#include <eigen3/Eigen/Core>
 
 typedef CGAL::Exact_predicates_exact_constructions_kernel Kernel;
 typedef CGAL::Polyhedron_3<Kernel> Polyhedron;
@@ -88,7 +87,7 @@ class ShapeFactory
  public:
   static WorkspacePoly CreateBox(BoxConfig box, float extrude_width);
   static WorkspacePoly CreateTriangle(TriangleConfig tri, float extrude_width);
-  static LineSegment CreateLine(DT_Vector3 p1, DT_Vector3 p2, float extrude_width);
+  static LineSegment CreateLine(Eigen::Vector3d p1, Eigen::Vector3d p2, float extrude_width);
   static CGAL_Aff_Transform CreateRigidTf(float x, float y, float theta);
   static Polyhedron ExtrudePolygon(Polygon in, float extrude_width);
 };

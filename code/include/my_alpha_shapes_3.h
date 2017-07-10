@@ -21,10 +21,6 @@
 //
 // Author(s)     : Sylvain Pion
 
-#include <CGAL/Cartesian.h>
-#include <iostream>
-#include <Alpha_shapes_disconnection.h>    
-#include <CGAL/Timer.h>
 
 #ifndef CGAL_USE_GEOMVIEW
 int main()
@@ -34,47 +30,8 @@ int main()
 }
 #else
 
-#include <fstream>
 #include <unistd.h> // for sleep()
-
-#include <CGAL/Triangulation_euclidean_traits_xy_3.h>
-
-#include <CGAL/Delaunay_triangulation_2.h>
-#include <CGAL/Delaunay_triangulation_3.h>
-
-#include <CGAL/IO/Geomview_stream.h>
-#include <CGAL/IO/Triangulation_geomview_ostream_2.h>
-#include <CGAL/IO/Triangulation_geomview_ostream_3.h>
-
-#include <CGAL/intersections.h>
-
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Regular_triangulation_euclidean_traits_3.h>
-#include <CGAL/Regular_triangulation_3.h>
-#include <CGAL/Alpha_shape_3.h>
-#include <list>
-#include <math.h>
-
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-
-typedef CGAL::Regular_triangulation_euclidean_traits_3<K> Gt;
-
-typedef CGAL::Timer                         Timer;
-
-typedef CGAL::Alpha_shape_vertex_base_3<Gt>         Vb;
-typedef CGAL::Alpha_shape_cell_base_3<Gt>           Fb;
-typedef CGAL::Triangulation_data_structure_3<Vb,Fb> Tds;
-typedef CGAL::Regular_triangulation_3<Gt,Tds>       Triangulation_3;
-typedef CGAL::Alpha_shape_3<Triangulation_3>        Alpha_shape_3;
-
-typedef Alpha_shape_3::Cell_handle          Cell_handle;
-typedef Alpha_shape_3::Vertex_handle        Vertex_handle;
-typedef Alpha_shape_3::Facet                Facet;
-typedef Alpha_shape_3::Edge                 Edge;
-typedef Gt::Weighted_point                  Weighted_point;
-typedef Gt::Bare_point                      Bare_point;
-
-
+#include "Typedef.h"
 
 int main()
 {

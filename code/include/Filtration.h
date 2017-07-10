@@ -1,24 +1,8 @@
 #ifndef FILTRATION_H
 #define FILTRATION_H
 
-#include <map>
-#include <vector>
-
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Regular_triangulation_euclidean_traits_3.h>
-#include <CGAL/Regular_triangulation_3.h>
-#include <CGAL/Union_find.h>
-#include <CGAL/Timer.h>
-#include <CGAL/utility.h>
-#include <CGAL/IO/Geomview_stream.h>
-
-#include "phat/boundary_matrix.h"
-
 #include "PotentialFunction.h"
-#include "Triangulation_Planner.h"
-
-typedef Triangulation_3::Cell_circulator Cell_circulator;
-typedef phat::index Index;
+#include "Typedef.h"
 
 namespace ASE {
   enum Filtration_Cell_Class {
@@ -49,6 +33,44 @@ struct Vertex_info_3 {
   
 private: 
   Index index_;
+};
+
+
+//Struct that is used by the run_persistance method to return important information on the best persisence pair.
+struct Persistence_info {
+  Persistence_info() { 
+  } 
+
+  Persistence_info(Potential potential, ASE::Simplex birth_simplex, ASE::Simplex death_simplex, int birth_index, int death_index) {
+    potential_ = potential;
+    birth_simplex_ = birth_simplex;
+    death_simplex_ = death_simplex; 
+    birth_index_ = birth_index;
+    death_index_ = death_index;
+  }
+  
+  Potential get_potential() const {
+    return potential_;
+  }
+  
+  ASE::Simplex get_birth_simplex() {
+    return birth_simplex_;
+  }
+  
+  ASE::Simplex get_death_simplex() {
+    return death_simplex_;
+  }
+
+  bool operator<(const Persistence_info& other) const {
+    return potential_ < other.get_potential();
+  } 
+
+public: 
+  Potential potential_;
+  ASE::Simplex birth_simplex_;
+  ASE::Simplex death_simplex_;
+  int birth_index_;
+  int death_index_;
 };
 
 
@@ -120,14 +142,16 @@ class Filtration_3
   // Puts the simplices exterior to the subcomplex below potential into the vector | complex |
   void subcomplex_exterior(std::vector<Cell_handle>& complex);
   void subcomplex_exterior(std::vector<Cell_handle>& complex, Potential potential, bool print = false);
-
+  void subcomplex_exterior_simplices(std::vector<ASE::Simplex>& complex);
   // Sets the potential in the filtration
   void set_potential(Potential potential);
   Potential get_potential();
   Potential simplex_potential(Index i);
+  bool simplex(Cell_handle ch, ASE::Simplex& s);
 
   // Classifies the cell as being inside / outside the current filtered complex
-  ASE::Filtration_Cell_Class classify(Cell_handle ch, bool print = false);
+  ASE::Filtration_Cell_Class classify(Cell_handle ch, bool print = false); 
+  ASE::Filtration_Cell_Class classify(Cell_handle ch1,Cell_handle ch2, bool print = false);
 
   // Saves the current boundary matrix
   void save_boundary_matrix(std::string filename = "filtration.bin");
@@ -135,6 +159,12 @@ class Filtration_3
   // Render the triangles of the subcomplex to the geomview stream
   void render_subcomplex(CGAL::Geomview_stream& gv, float potential_thresh);
   void render_subcomplex_exterior(CGAL::Geomview_stream& gv);
+  
+  // Return the ideal simplex to place the object through Persistent Homology
+  std::vector< Persistence_info > run_persistence(std::vector<Weighted_point> points_at_infinity, Potential cutoff,
+                                                  float theta_scale, ASE::Vertex& birth_point,
+                                                  float min_energy_thresh = 0.0f);
+  bool touches_infinity(ASE::Simplex given_simplex, std::vector<Weighted_point> points_at_infinity);
 
  protected:
   // Updates the classification cutoff index based on the current value

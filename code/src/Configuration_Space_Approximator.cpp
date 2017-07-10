@@ -10,6 +10,9 @@
 //#include <omp.h>
 #include <unistd.h>
 
+//#define DISPLAY_AS
+#define DISPLAY_RATE 10000
+
 Configuration_Space_Approximator::Configuration_Space_Approximator(CfApproxConfig config, CGAL::Geomview_stream& gv)
   : connectivity_checker_(NULL), config_(config), gprm_norm_(0.0f, 10.0f), gprm_distribution_(rng_, gprm_norm_), gv_(gv)
 {
@@ -62,9 +65,16 @@ void Configuration_Space_Approximator::pose_to_point(Pose2D pose, float radius_s
 
 void Configuration_Space_Approximator::point_to_pose(Weighted_point point, Pose2D& pose)
 {
-  pose.x = point.point().x() / config_.x_scale;
-  pose.y = point.point().y() / config_.y_scale;
-  pose.theta = point.point().z() / config_.theta_scale;
+  pose.x = (float)(point.point().x() / config_.x_scale);
+  pose.y = (float)(point.point().y() / config_.y_scale);
+  pose.theta = (float)(point.point().z() / config_.theta_scale);
+}
+
+void Configuration_Space_Approximator::point_3_to_pose(Point_3 point, Pose2D& pose)
+{
+  pose.x = CGAL::to_double(point.x()) / config_.x_scale;
+  pose.y = CGAL::to_double(point.y()) / config_.y_scale;
+  pose.theta = CGAL::to_double(point.z()) / config_.theta_scale;
 }
 
 bool Configuration_Space_Approximator::add_to_triangulation(Pose2D pose, float radius_sq, Triangulation_3& triangulation, CGAL::Color c)
@@ -73,6 +83,10 @@ bool Configuration_Space_Approximator::add_to_triangulation(Pose2D pose, float r
   Pose2D pose_id;
   pose_id.x = pose.x;
   pose_id.y = pose.y;
+
+  if (pose.x > max_x_val_) {
+    max_x_val_ = pose.x;
+  }
 
   for (int i = -config_.num_rots-1; i <= config_.num_rots; i++) {
     // get an identification of theta
@@ -140,29 +154,36 @@ unsigned int Configuration_Space_Approximator::sample_poses(Pose2D pose_orig, un
   Pose2D pose;
 
   //  #pragma omp parallel for
+  LOG(INFO) << num_samples;
   for (unsigned int i = 0; i < num_samples; i++) {
 
-    if (i % 10000 == 0) {
+    if (i % DISPLAY_RATE == 0) {
       LOG(INFO) << "Sample " << i;
       //      LOG(INFO) << "Tri " << collision_triangulation_.number_of_vertices();
     }
 
-    // sample a pose uniformly at random
-    sample_random_pose(pose);
-    
-    bool collision = check_collisions(pose);
-    if (collision) {
-      num_collisions++;
+    // sample a pose in collision using REJECTION sampling
+    MeshCollisionResult coll_result = sample_random_pose(pose); 
+    float nu = 0.95f; // scaling factor to account for libccd tolerance while preserving nonzero pen depth
+    float distance = coll_result.distance;
+    distance = nu * distance;
+
+    if (coll_result.collision) {
+      if (distance > 0.0f)
+        add_to_collision_triangulation(pose, distance*distance);
+        num_collisions++;
+    } else {
+      //add_to_free_space_triangulation(pose, distance*distance);
     }
   }
   return num_collisions;
 }
 
-void Configuration_Space_Approximator::sample_random_pose(Pose2D& pose)
+MeshCollisionResult Configuration_Space_Approximator::sample_random_pose(Pose2D& pose)
 {
   //  uniform_random_pose(pose);
   // gaussian_prm_pose(pose);
-  uniform_collision_pose(pose);
+  return uniform_collision_pose(pose);
   // float eps = 0.0f;
   // float toss = (float)rand()/(float)RAND_MAX;
   // if (toss < eps) {
@@ -180,8 +201,8 @@ void Configuration_Space_Approximator::uniform_random_pose(Pose2D& pose)
   pose.theta = ((float)rand()/(float)RAND_MAX) * (config_.theta_max - config_.theta_min) + config_.theta_min;; //((2 * M_PI); // don't use bounds, always uniform at random
 }
 
-void Configuration_Space_Approximator::uniform_collision_pose(Pose2D& pose)
-{
+MeshCollisionResult Configuration_Space_Approximator::uniform_collision_pose(Pose2D& pose)
+{ 
   float eps = 1e-3;
   MeshCollisionResult coll_result;
   coll_result.collision = false;
@@ -191,6 +212,8 @@ void Configuration_Space_Approximator::uniform_collision_pose(Pose2D& pose)
     uniform_random_pose(pose);
     coll_result = check_object_obstacle_intersection(pose);
   }
+  //Return that this pose is in collision...
+  return coll_result;
 }
 
 void Configuration_Space_Approximator::gaussian_prm_pose(Pose2D& pose)
@@ -241,12 +264,8 @@ void Configuration_Space_Approximator::level_set_random_pose(Pose2D& pose)
 
 bool Configuration_Space_Approximator::check_collisions(Pose2D pose)
 {
-  // check for collisions
-  float eps = 0.25f; // tolerance of libccd according to config (but not actually)
-  float nu = 0.95f; // scaling factor to account for libccd tolerance while preserving nonzero pen depth
   MeshCollisionResult coll_result = check_object_obstacle_intersection(pose);
-  float distance = coll_result.distance;
-  distance = nu * distance;
+  //distance = std::max<float>(distance - 0.01f, 0.0f);
 
   // cap the distance by the known distance to the origin to correct for CCD tolerance issues
   // float theta = pose.theta;
@@ -264,42 +283,53 @@ bool Configuration_Space_Approximator::check_collisions(Pose2D pose)
   //   while(true);
 
   // add to appropriate triangulation
-  if (coll_result.collision) {
-    if (distance > 0.0f)
-      add_to_collision_triangulation(pose, distance*distance);
-    return true;
-  }
-  add_to_free_space_triangulation(pose, distance*distance);
-  return false;
+  return coll_result.collision;
 }
 
-MeshCollisionResult Configuration_Space_Approximator::check_object_obstacle_intersection(Pose2D pose)
+
+//Check collisions without adding to a triangulation....
+bool Configuration_Space_Approximator::check_collisions_safe(Pose2D pose)
 {
+  // check for collisions
+  MeshCollisionResult coll_result = check_object_obstacle_intersection(pose, false);
+  if (coll_result.collision) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+MeshCollisionResult Configuration_Space_Approximator::check_object_obstacle_intersection(Pose2D pose, bool print, bool upper)
+{
+  //Timer timeout;
+  //timeout.start();
+
   float pen_depth = 0.0f;
   float dist = FLT_MAX;
   float time = 0.0f;
   bool collision = false;
 
-  bool print = false;
-  // if (fabs(pose.x - -0.830232) < 1e-5)
-  //   print = true;
-
   if (object_ != NULL && obstacles_.size() > 0) {
     Eigen::Matrix4f pose_mat = CreatePose(pose.x, pose.y, pose.theta);
-    object_->SetPose(pose_mat, false, print);
+    object_->SetPose(pose_mat, false, false);
+
+    if (print) {
+      std::cout << "Set pose " << std::endl << pose_mat << std::endl;
+    }
 
     // computate penetration depth for each potential obstacle
     for (unsigned int j = 0; j < obstacles_.size(); j++) {
 
       // TODO: change back to lower bound
-      MeshCollisionResult c = Mesh::LowerBoundCollision(object_, obstacles_[j], print);
-      //      MeshCollisionResult c2 = Mesh::UpperBoundCollision(object_, obstacles_[j]);
+      MeshCollisionResult c;
+      if (!upper)
+        c = Mesh::LowerBoundCollision(object_, obstacles_[j], false);
+      else
+        c = Mesh::UpperBoundCollision(object_, obstacles_[j]);
 
       time += c.time;
       if (c.collision) {
         collision = true;
-        // LOG(INFO) << "Lower bd " << c.distance;
-        // LOG(INFO) << "Upper bd " << c2.distance;
 
         if (c.distance > pen_depth) {
           pen_depth = c.distance;
@@ -312,13 +342,20 @@ MeshCollisionResult Configuration_Space_Approximator::check_object_obstacle_inte
       }
     }
   }
-  // if (fabs(pose.x - -0.830232) < 1e-5)
-  //   while(true);
   // fill in collision result
   MeshCollisionResult result;
   result.collision = collision;
   result.time = time;
 
+  //timeout.stop();
+  //if (timeout.time() > 2.0f){
+    //std::cout << "COLL CHECK TIME :" << timeout.time() << std::endl; 
+    //std::cout << "IN COLLISION: " << collision << std::endl;
+    //std::cout << "PEN DEPTH: " << pen_depth << std::endl; 
+    //visualize_pose(pose);
+    //wait(5);
+  //}
+  
   if (!collision) {
     result.distance = dist;
   }
@@ -326,14 +363,138 @@ MeshCollisionResult Configuration_Space_Approximator::check_object_obstacle_inte
     result.distance = pen_depth;
   }
   return result;
+
 }
 
+void Configuration_Space_Approximator::visualize_pose(Pose2D pose) 
+{
+  gv_.clear();
+  gv_ << CGAL::WHITE;
+  Eigen::Matrix4f object_pose = CreatePose(pose.x, pose.y, pose.theta);
+  Eigen::Matrix4f temp_pose = object_->Pose();
+  object_->SetPose(object_pose, true); 
+  object_->RenderToGeomview(gv_);
+  for (unsigned int j = 0; j < obstacles_.size(); j++) { 
+    obstacles_[j]->RenderToGeomview(gv_);
+  }
+  wait(1);
+  object_->SetPose(temp_pose, true); 
+}
+
+
+
+float Configuration_Space_Approximator::void_volume(std::vector<ASE::Simplex> void_simplices) {
+
+  float volume = 0.0f;
+  for (int i = 0; i < void_simplices.size(); i++) {
+    ASE::Simplex cur_simplex = void_simplices[i];
+    Bare_point cur_centroid = cur_simplex.centroid();
+    Pose2D cur_pose;
+    point_to_pose(cur_centroid, cur_pose);         
+    if (check_collisions_safe(cur_pose)) {
+      continue;
+    }
+    // get vertices and compute volume
+    Tetrahedron_3 tetra = Convert_Simplex_To_Tetrahedron(cur_simplex);    
+    volume = volume + tetra.volume();
+  }
+
+  return volume;
+
+}
+
+//Check push reacability via a simple line search
+bool Configuration_Space_Approximator::check_push_reach(Pose2D pose, Eigen::Vector2d force_direction, float disc, float backup)
+{
+  Eigen::VectorXd cur_vector(2);
+  cur_vector(0) = pose.x;
+  cur_vector(1) = pose.y;
+  Eigen::Vector2d inc_vector(force_direction(0), force_direction(1));
+  inc_vector = -(backup/disc)*inc_vector;
+  float theta = pose.theta;
+
+  for (int i = 0; i < disc; i++) {
+    Pose2D test_pose;
+    test_pose.x = (float) cur_vector[0];
+    test_pose.y = (float) cur_vector[1];
+    test_pose.theta = theta;
+    if (check_collisions_safe(test_pose)) {
+      return false;
+    }
+    cur_vector = cur_vector + inc_vector; 
+  }
+
+  return true;
+}
+
+float Configuration_Space_Approximator::void_opening_area(std::vector<ASE::Simplex> void_simplices, Bare_point birth_vertex, AlphaCustomPotential potential_func, Eigen::Vector2d force_vector,
+                                        Potential birth_energy) 
+{
+  float total_area = 0.0f;
+
+  for (int i = 0; i < void_simplices.size(); i++) {
+    ASE::Simplex cur_simplex = void_simplices[i];
+
+    float projected_area = simplex_projected_area(cur_simplex, birth_vertex, potential_func, force_vector, birth_energy);
+    total_area = total_area + projected_area;   
+  }
+
+  return total_area;
+}
+
+//What area does a simplex on the boundary of a void's CC cast onto the opening of the void
+float Configuration_Space_Approximator::simplex_projected_area(ASE::Simplex cur_simplex, Bare_point birth_vertex, AlphaCustomPotential potential_func, Eigen::Vector2d force_vector, Potential birth_energy)
+{
+  //Get point vecotrs for corners of a triangle completely abve void opening
+  std::vector< Eigen::Vector3d > triangle_points;
+  for (int i = 0; i < 4; i ++) {
+    ASE::Vertex cur_vertex = cur_simplex.vertex(i);
+    if (potential_func.potential(cur_vertex) <= birth_energy && cur_simplex.potential() != -FLT_MAX) {
+      
+      Eigen::Vector3d point_vector(cur_vertex.point().x(), cur_vertex.point().y(), cur_vertex.point().z());
+        
+      triangle_points.push_back(point_vector);
+    }
+  }
+
+  if (triangle_points.size() < 3) {
+    return 0.0f;
+  }
+
+  Eigen::Vector3d known_point(birth_vertex.x(), birth_vertex.y(), birth_vertex.z());
+
+  //Force direction is the normal vector of the plane represetning the void opening
+  Eigen::Vector3d normal_vector(force_vector(0), force_vector(1), 0.0f);
+
+  //Some math to actually get projected points onto plabe
+  double d = -known_point.dot(normal_vector);
+
+  for (int i = 0; i < 4; i++) {
+    Eigen::Vector3d point_vector = triangle_points[i];
+    double backup = normal_vector.dot(point_vector) + d;
+    point_vector = point_vector - backup*normal_vector;
+    triangle_points[i] = point_vector;
+  }
+
+  return triangle_area(triangle_points);
+}
+
+
+
 // get the min energy to separate the initial pose from the "escape" space
-bool Configuration_Space_Approximator::min_escape_energy(Pose2D pose, EscapeEnergyConfig energy_config, EscapeEnergyResult& result)
+std::vector< std::vector<synthesis_info> > Configuration_Space_Approximator::synthesize_grasps(int num_searches, Pose2D pose, 
+			    EscapeEnergyConfig energy_config, EscapeEnergyResult& result, float angle_sweep, float angle_disc, bool check_reachability, float max_push_force)
 { 
   LOG(INFO) << "Beginning of escape energy";
+
   // currently must reset the triangulation
   reset();
+  max_x_val_ = 0.0f;
+
+  // params for checking reachability
+  float disc = 200;
+  float backup = 100;
+  float min_energy_thresh = 0.5f;
 
   // check collisions for initial pose
   check_collisions(pose);
@@ -353,9 +514,11 @@ bool Configuration_Space_Approximator::min_escape_energy(Pose2D pose, EscapeEner
   unsigned int num_collisions = sample_poses(pose, energy_config.num_samples);
   timer_.stop();
   result.sample_time = timer_.time();
+  float sample_time = timer_.time();
   timer_.reset();
   LOG(INFO) << "Sampled poses with collision ratio " << (float)num_collisions / (float) energy_config.num_samples;
   LOG(INFO) << "Sampling took " << result.sample_time;
+  LOG(INFO) << "Max X Val was " << max_x_val_;
 
   // create alpha shape for collision space and use it to generate a filtration over gravity and alpha
   timer_.start();
@@ -367,202 +530,325 @@ bool Configuration_Space_Approximator::min_escape_energy(Pose2D pose, EscapeEner
                                                                           CGAL::cpp11::tuple<std::back_insert_iterator<std::vector<CGAL::Object> >,
                                                                                              std::back_insert_iterator<std::vector<K::FT> > > >(std::back_inserter(filtered_simplices),
                                                                                                                                                 std::back_inserter(alpha_values))); 
-  LOG(INFO) << "Created alpha shape " << filtered_simplices.size() ;
-
-  // create filtration based on alpha shape and gravity potential function
-  GravityPotential gp(start_point.point(), object_->Mass(), config_.x_scale, config_.y_scale, config_.theta_scale);
-  //  DistancePotential gp(start_point.point(), config_.x_scale, config_.y_scale, config_.theta_scale);
-  AlphaCustomPotential potential_func(alpha_shape, gp, cf_padding_*cf_padding_); 
-  LOG(INFO) << "Created potential func";
-  Manifold_Sweep_Filtration_3 collision_filtration(alpha_shape, filtered_simplices, potential_func);
-  LOG(INFO) << "Created filtration";
-  connectivity_checker_ = new Connectivity_Checker(alpha_shape, collision_filtration, gv_);
+  LOG(INFO) << "Created alpha shape " << filtered_simplices.size();
   timer_.stop();
   LOG(INFO) << "Cage alpha shape constructed in: " << timer_.time() << " seconds.";
   result.triangulation_time = timer_.time();
+  float triangulation_time = timer_.time();
   timer_.reset();
+  
+  std::vector< std::vector<synthesis_info> > all_poses; 
 
-  // binary search for potential value
-  bool caged = false;
-  bool connected = false;
-  float potential_low = energy_config.energy_min;
-  float potential_high = energy_config.energy_max;
-  float potential_mid;
-  Weighted_point end_point;
-  timer_.start();
-  while ((potential_high - potential_low) > energy_config.energy_res) {
-    // check for connection between the initial point and every other point
-    connected = false;
-    potential_mid = potential_high / 2.0f + potential_low / 2.0f;
-    LOG(INFO) << "Checking potential " << potential_mid << " from bounds " << potential_low << " " << potential_high;
-    for (unsigned int i = 0; i < points_at_infinity_.size() && !connected; i++) {
-      end_point = points_at_infinity_[i];    
-      bool out = connectivity_checker_->connected(start_point.point(), end_point.point(), potential_mid);
-      connected |= out;
+  // sweep through push directions
+  angle_sweep = std::min<float>(angle_sweep, M_PI); // cap angle for sweep
+  for (float angle_offset = -angle_sweep; angle_offset <= angle_sweep; angle_offset += angle_disc) { 
+    LOG(INFO) << "Checking angle offset " << angle_offset;
+    
+    float pi = M_PI;
+    float pi_neg = -M_PI;
+   
+    //If there's overlap, don't do the same angle twice!
+    if (angle_offset == pi_neg && angle_sweep == pi) {
+      continue;
     }
 
-    // update search range based on outcome
-    if (connected) {
-      potential_low = potential_mid;
+    Timer persistence_timer;
+    persistence_timer.start();
+    
+    // create potential function
+    LinearPotentialFunction push_force(start_point.point(), max_push_force, config_.x_scale,
+                                       config_.y_scale, config_.theta_scale, angle_offset);
+    AlphaCustomPotential potential_func(alpha_shape, push_force, cf_padding_*cf_padding_); 
+    LOG(INFO) << "Created potential func";
+
+    // create filtration based on alpha shape and gravity potential function
+    Manifold_Sweep_Filtration_3 collision_filtration(alpha_shape, filtered_simplices, potential_func);
+    LOG(INFO) << "Created filtration";
+    persistence_timer.stop();
+    float filtration_time = persistence_timer.time();
+
+    // create connectivity checker for parsing void
+    LOG(INFO) << "Create connectivity checker";
+    bool cache_connected_components = false;
+    float p = 0.0f;
+    connectivity_checker_ = new Connectivity_Checker(alpha_shape, collision_filtration,
+                                                     gv_, p, cache_connected_components);
+
+    LOG(INFO) << "Running persistence";
+    persistence_timer.start();
+    ASE::Vertex birth_point;
+    std::vector< Persistence_info > delta_pairs = collision_filtration.run_persistence(points_at_infinity_, -FLT_MAX,
+                                                                                       config_.theta_scale,
+                                                                                       birth_point,
+                                                                                       min_energy_thresh);
+    persistence_timer.stop();
+    float persistence_time = persistence_timer.time();
+
+    //Just useful info for debugging purposes. Not needed for core algo..
+    Pose2D best_pose;
+    std::vector<ASE::Simplex> best_void_simplices; 
+    Bare_point best_centroid;
+    Persistence_info optimal_info;
+    Potential best_delta = 0.0f;
+
+    //Do the region growing algorithm for each void.
+    std::vector<synthesis_info> extracted_poses; 
+    Potential seen_void_potential = 0.0;
+    int num_searched = 0;
+
+    std::ofstream of("chosen_persistance_pairs.csv", std::ios::app);
+    for (int i = delta_pairs.size() - 1; i >= 0 && num_searched < num_searches; i--) {
+      Potential void_potential = delta_pairs[i].get_potential();
+      //LOG(INFO) << "Checking void " << i << " with potential " << void_potential;
+      
+      //The voids are sorted by delta, so we know when we're done...
+      if (void_potential != seen_void_potential) {
+        Timer void_timer;
+        void_timer.start();
+
+        // walk through the void, looking for highest energy void in collision 
+        ASE::Simplex death_simplex = delta_pairs[i].get_death_simplex();    
+        ASE::Simplex birth_simplex = delta_pairs[i].get_birth_simplex();
+
+        // get birth pose for debugging
+        Bare_point birth_vertex;
+        Potential birth_energy = -FLT_MAX;
+        ASE::Vertex v;
+        for (int a = 0; a < 3; a++) {
+          v = birth_simplex.vertex(a);
+          Potential v_energy = push_force.potential(v);
+          if (v_energy > birth_energy) {
+            birth_vertex = v.point();
+            birth_energy = v_energy;
+          }
+          //std::cout << "VISUALIZE POSE!" << std::endl;
+	  //Pose2D cur_pose;
+	  //point_to_pose(v, cur_pose);
+	  //std::cout << cur_pose.x << " " << cur_pose.y << " " << cur_pose.theta << std::endl;
+	  //visualize_pose(cur_pose);
+	  //wait(10);
+	}
+        Pose2D birth_pose;
+        point_to_pose(birth_vertex, birth_pose);         
+
+        // get simplices in void and sort
+        //LOG(INFO) << "Getting connected component";
+        std::vector<ASE::Simplex> void_simplices =                      \
+          connectivity_checker_->connected_component(death_simplex.centroid(), 
+                                                     birth_simplex.potential());
+        std::sort(void_simplices.begin(), void_simplices.end());
+        
+        // check collisions for each simplex
+        bool void_searched = true;
+        bool found_coll_free_pose = false;
+        for (int j = void_simplices.size() - 1; j >= 0 && !found_coll_free_pose; j--) {
+          //LOG(INFO) << "Checking simplex " << j;
+
+          // get next pose in void
+          ASE::Simplex cur_simplex = void_simplices[j];
+          Bare_point cur_centroid = cur_simplex.centroid();
+          Pose2D cur_pose;
+          point_to_pose(cur_centroid, cur_pose);         
+          bool cur_collision = check_collisions_safe(cur_pose);   
+          ASE::Vertex cur_vertex = Weighted_point(cur_centroid, 0.0f);
+          Potential cur_potential = potential_func.potential(cur_vertex);
+          Potential cur_delta = abs(cur_potential - birth_simplex.potential());
+
+          // check validity
+          // 1. centroid within void (external in current filtration)
+          // 2. not in collision
+          // 3. reachable by linear push, IF we care about that (see check_reachability)
+          // 4. within 0 to 2pi angle bounds
+          if (cur_potential > birth_simplex.potential() && cur_delta > min_energy_thresh &&
+              !cur_collision &&
+              (!check_reachability ||  check_push_reach(cur_pose, push_force.get_force_vector(), disc, backup)) &&
+              cur_pose.theta >= 0.0f && cur_pose.theta <= 2*M_PI) {
+
+            // set best pose (for debugging only)
+            if (cur_delta > best_delta) {
+              best_delta = cur_delta;
+              best_pose = cur_pose;
+              best_void_simplices = void_simplices;
+              best_centroid = cur_centroid;
+              optimal_info = delta_pairs[i];
+            }          
+
+            void_timer.stop();
+
+            LOG(INFO) << "Birth pose " << birth_pose.x << " " << birth_pose.y << " " << birth_pose.theta;
+            LOG(INFO) << "EBC pose " << cur_pose.x << " " << cur_pose.y << " " << cur_pose.theta;
+            LOG(INFO) << "EBC delta " << cur_delta;
+            LOG(INFO) << "EBC energy " << cur_simplex.potential();
+
+            // MeshCollisionResult lower_res = check_object_obstacle_intersection(pose, false);
+            // MeshCollisionResult upper_res = check_object_obstacle_intersection(pose, true);
+            // LOG(INFO) << "Lower collision: " << lower_res.collision;
+            // LOG(INFO) << "Upper collision: " << upper_res.collision;
+            // visualize_pose(cur_pose);
+            // sleep(10);
+
+            ASE::Vertex cur_vertex;
+            Potential min_energy = FLT_MAX;
+            for (int a = 0; a < 3; a++) {
+              v = cur_simplex.vertex(a);
+              Potential v_energy = push_force.potential(v);
+              if (v_energy < min_energy) {
+                cur_vertex = v.point();
+                min_energy = v_energy;
+              }
+            }
+            LOG(INFO) << "Cur energy " << min_energy;
+            LOG(INFO) << "Cur vertex " << cur_vertex;
+
+            
+	    
+            //DEBUG
+	    //gv_.clear();
+            //gv_ << CGAL::YELLOW;
+	    //gv_ << Kernel::Sphere_3(Point_3(cur_centroid.x(), cur_centroid.y(), cur_centroid.z()), 0.05f);
+	    //gv_ << CGAL::RED;
+	    //gv_ << Convert_Simplex_To_Triangle(birth_simplex);
+	    //alpha_shape.set_alpha(0.0f);
+	    //gv_ << CGAL::GREEN;  
+	    //for (int x = 0; x < void_simplices.size(); x++){
+            //  for (int a = 0; a < 3; a++) {
+            //    ASE::Vertex v  = void_simplices[x].vertex(a);
+	    //    Pose2D cur_pose;
+	    //    point_to_pose(v, cur_pose);
+	    //    std::cout << "CUR POSE :" << " " << cur_pose.x << " " << cur_pose.y << " " << cur_pose.theta << std::endl;
+	    //  }
+	    //  gv_ << Convert_Simplex_To_Tetrahedron(void_simplices[x]);
+	    //}
+	    //wait(60);
+            //gv_ << CGAL::DEEPBLUE;
+	    ////gv_ << alpha_shape; 
+            //gv_ << Convert_Simplex_To_Triangle(birth_simplex); 
+	    //wait(1000);
+	    
+	    
+	    // extract void info
+            float void_time = void_timer.time();
+            visualize_pose(cur_pose); 
+            //DEBUG
+	    float v_volume = void_volume(void_simplices); 
+            float v_area = void_opening_area(void_simplices, birth_vertex, potential_func, push_force.get_force_vector(), birth_simplex.potential()); 
+	    float norm_delta = cur_delta / (max_push_force);
+            synthesis_info extracted(cur_pose,
+                                     birth_pose,
+                                     cur_delta,
+                                     norm_delta,
+                                     v_volume,
+				     v_area,
+                                     sample_time,
+                                     triangulation_time,
+                                     filtration_time,
+                                     persistence_time,
+                                     void_time,
+                                     angle_offset); 
+            extracted_poses.push_back(extracted); 
+            
+            // set flag to exit loop
+            found_coll_free_pose = true;
+            seen_void_potential = void_potential;
+            num_searched++;
+
+	    //Second damp of pair info ONLY for the chosen poses///
+	    of << delta_pairs[i].birth_index_ << ", " << delta_pairs[i].death_index_ << "\n";
+
+          }
+        }
+      }
+    } 
+
+    ASE::Simplex death_simplex = optimal_info.get_death_simplex();
+    ASE::Simplex birth_simplex = optimal_info.get_birth_simplex();
+    Potential birth_energy = birth_simplex.potential();
+    
+    if (extracted_poses.size() > 0) {
+      LOG(INFO) << "FOUND ENERGY-BOUNDED CAGES";
+      LOG(INFO) << "Here is the best pose: " << best_pose.x << " " << best_pose.y << " " << best_pose.theta;
+      LOG(INFO) << "Here is the largest delta: " << best_delta;
     }
     else {
-      potential_high = potential_mid;
+      LOG(INFO) << "DID NOT FIND ANY ENERGY-BOUNDED CAGES";
     }
-  }
 
-  if (potential_high == energy_config.energy_max) {
-    LOG(INFO) << "Could not find a disconnection. Upper potential bound may have been too low";
-  }
-  timer_.stop();
-  result.iter_time = timer_.time();
-  timer_.reset();
+    // sort in order of increasing potential
+    std::sort(extracted_poses.begin(), extracted_poses.end());
+    all_poses.push_back(extracted_poses); 
+    LOG(INFO) << "SORTED";
+   
+    //for (int i = 0; i < extracted_poses.size(); i++) {
+    //  Pose2D cur_pose;
+    //  cur_pose = extracted_poses[i].get_pose();
+    //  Potential cur_delta = extracted_poses[i].get_delta();
+    //  std::cout << "Here is the cur pose: " << cur_pose.x << " " << cur_pose.y << " " << cur_pose.theta << std::endl;
+    //  std::cout << "Here is the cur delta: " << cur_delta << std::endl; 
+    //}
 
-  // same for free space
-  bool use_free = false;
-  if (use_free) {
-    LOG(INFO) << "Using free alpha shape";
-    timer_.start();
-    Alpha_shape_3 free_alpha_shape(free_space_triangulation_, default_alpha, Alpha_shape_3::GENERAL);
-    std::vector<CGAL::Object> free_filtered_simplices;
-    std::vector<K::FT> free_alpha_values;
-    free_alpha_shape.filtration_with_alpha_values(CGAL::Dispatch_output_iterator<CGAL::cpp11::tuple<CGAL::Object, K::FT>,
-                                                                                 CGAL::cpp11::tuple<std::back_insert_iterator<std::vector<CGAL::Object> >,
-                                                                                                    std::back_insert_iterator<std::vector<K::FT> > > >(std::back_inserter(free_filtered_simplices),
-                                                                                                                                                       std::back_inserter(free_alpha_values))); 
-    LOG(INFO) << "Created free alpha shape " << free_filtered_simplices.size();
- 
-    // create filtration based on alpha shape and gravity potential function
-    //  DistancePotential gp(start_point.point(), config_.x_scale, config_.y_scale, config_.theta_scale);
-    AlphaCustomPotential free_potential_func(free_alpha_shape, gp, cf_padding_*cf_padding_); 
-    LOG(INFO) << "Created potential func";
-    Manifold_Sweep_Filtration_3 free_collision_filtration(free_alpha_shape, free_filtered_simplices, free_potential_func);
-    LOG(INFO) << "Created filtration";
-    connectivity_checker_ = new Connectivity_Checker(free_alpha_shape, free_collision_filtration, gv_);
-    timer_.stop();
-    LOG(INFO) << "Free space alpha shape constructed in: " << timer_.time() << " seconds.";
-    timer_.reset();
 
-    // binary search for potential value
-    potential_low = energy_config.energy_min;
-    potential_high = energy_config.energy_max;
-    timer_.start();
-    while ((potential_high - potential_low) > energy_config.energy_res) {
-      // check for connection between the initial point and every other point
-      connected = false;
-      potential_mid = potential_high / 2.0f + potential_low / 2.0f;
-      LOG(INFO) << "Checking potential " << potential_mid << " from bounds " << potential_low << " " << potential_high;
-      for (unsigned int i = 0; i < points_at_infinity_.size() && !connected; i++) {
-        end_point = points_at_infinity_[i];
-        bool out = connectivity_checker_->connected(start_point.point(), end_point.point(), potential_mid);
-        connected |= out;
-      }
+    //Cell_handle death_cell;
+    //if (!CGAL::assign(death_cell, death_simplex.object())) {
+    //  LOG(INFO) << "Could not extract cell handle from death simplex";
+    //  exit(0);
+    //}
 
-      // update search range based on outcome
-      if (connected) {
-        potential_high = potential_mid;
-      }
-      else {
-        potential_low = potential_mid;
-      }
-    }
-    LOG(INFO) << "Upper potential " << potential_mid;
+    ////Raw_triangulation_3 cc_tri =                                        \
+    //    //  connectivity_checker_->connected_component(death_cell, birth_energy);
 
-#ifdef DISPLAY_AS
+    //// optional display alpha shape
     std::vector<Cell_handle> incident_cells;
-    Locate_type cs_lt, cg_lt;
+    Locate_type cs_lt, cg_lt, cb_lt;
     int cs_li, cs_lj;
-    int cg_li, cg_lj;
-    Cell_handle start_cell, end_cell;
-    start_cell = free_alpha_shape.locate(start_point.point(), cs_lt, cs_li, cs_lj); //find start cell //TODO: possible bug here to due with the locate query returning something 
-    end_cell = free_alpha_shape.locate(end_point.point(), cg_lt, cg_li, cg_lj);
-
+    //int cg_li, cg_lj;
+    //int cb_li, cb_lj;
+    Cell_handle start_cell, birth_cell;
+    start_cell = alpha_shape.locate(start_point.point(), cs_lt, cs_li, cs_lj); //find start cell
+    ////birth_cell = alpha_shape.locate(birth_point.point(), cb_lt, cb_li, cb_lj); //find start cell //TODO: possible bug here to due with the locate query returning something 
+    ////death_cell = alpha_shape.locate(death_simplex.point(), cg_lt, cg_li, cg_lj); //find start cell //TODO: possible bug here to due with the locate query returning something 
 
     if (cs_lt == Triangulation_3::VERTEX) {
       Vertex_handle vh = start_cell->vertex(cs_li);
-      free_alpha_shape.incident_cells(vh, std::back_inserter(incident_cells));
+      alpha_shape.incident_cells(vh, std::back_inserter(incident_cells));
       start_cell = incident_cells[0];
-      if (free_alpha_shape.classify(start_cell) == Alpha_shape_3::EXTERIOR) {
-        LOG(INFO) << "Start cell exterior";      
-      }
     }
 
-    free_alpha_shape.set_alpha(0.0f);
+    of.close();
+
+#ifdef DISPLAY_AS
     gv_.clear();
+    alpha_shape.set_alpha(0.0f);
     gv_ << CGAL::DEEPBLUE;
-    gv_ << free_alpha_shape;
-    gv_ << CGAL::PURPLE;
-
-    float y = potential_mid / (-9.81f * object_->Mass());
-    Bare_point p0(y, 1000, 1000); 
-    Bare_point p1(y, -1000, 1000); 
-    Bare_point p2(y, 500, -1000); 
-    Tri_3 t(p0, p1, p2);
-    //  gv_ << t;
-
+    gv_ << alpha_shape; 
+    wait(1000);
     gv_ << CGAL::GREEN;
     gv_ << Convert_Cell_To_Tetrahedron(start_cell);
 
-    incident_cells.clear();
-    if (cg_lt == Triangulation_3::VERTEX) {
-      Vertex_handle vh = end_cell->vertex(cg_li);
-      free_alpha_shape.incident_cells(vh, std::back_inserter(incident_cells));
-      end_cell = incident_cells[0];
-      gv_ << CGAL::RED;
-      gv_ << Convert_Cell_To_Tetrahedron(end_cell);      
-      //    LOG(INFO) << "End v";
-    }
-#endif
-    while(true);
-  }
+    gv_ << CGAL::YELLOW;
+    gv_ << Convert_Simplex_To_Tetrahedron(death_simplex);
 
-  // fill in result
-  result.energy = potential_mid; //std::min<float>(potential_mid, 0.0f); // assumed that the initial configuration is zero energy
-  result.normalized_energy = potential_mid / (GravityPotential::GRAVITY_ACCEL * object_->Mass());
-  result.path_exists = (potential_low > energy_config.energy_min); 
-  result.coll_ratio = (float)num_collisions / (float)energy_config.num_samples;
-  //  connectivity_checker_->connected_component_volume(start_point.point(), result.volume);
-
-  // optional display alpha shape
-#ifdef DISPLAY_AS
-  std::vector<Cell_handle> incident_cells;
-  Locate_type cs_lt, cg_lt;
-  int cs_li, cs_lj;
-  int cg_li, cg_lj;
-  Cell_handle start_cell, end_cell;
-  start_cell = alpha_shape.locate(start_point.point(), cs_lt, cs_li, cs_lj); //find start cell //TODO: possible bug here to due with the locate query returning something 
-  end_cell = alpha_shape.locate(end_point.point(), cg_lt, cg_li, cg_lj);
-
-  if (cs_lt == Triangulation_3::VERTEX) {
-    Vertex_handle vh = start_cell->vertex(cs_li);
-    alpha_shape.incident_cells(vh, std::back_inserter(incident_cells));
-    start_cell = incident_cells[0];
-    LOG(INFO) << "Start v";
-  }
-
-  alpha_shape.set_alpha(0.0f);
-  gv_.clear();
-  gv_ << CGAL::DEEPBLUE;
-  gv_ << alpha_shape;
-  gv_ << CGAL::PURPLE;
-
-  float y = potential_mid / (-9.81f * object_->Mass());
-  Bare_point p0(y, 1000, 1000); 
-  Bare_point p1(y, -1000, 1000); 
-  Bare_point p2(y, 500, -1000); 
-  Tri_3 t(p0, p1, p2);
-  //  gv_ << t;
-
-  gv_ << CGAL::GREEN;
-  gv_ << Convert_Cell_To_Tetrahedron(start_cell);
-
-  incident_cells.clear();
-  if (cg_lt == Triangulation_3::VERTEX) {
-    Vertex_handle vh = end_cell->vertex(cg_li);
-    alpha_shape.incident_cells(vh, std::back_inserter(incident_cells));
-    end_cell = incident_cells[0];
     gv_ << CGAL::RED;
-    gv_ << Convert_Cell_To_Tetrahedron(end_cell);      
-    //    LOG(INFO) << "End v";
-  }
+    gv_ << Convert_Simplex_To_Triangle(birth_simplex);
+
+    // float y = birth_energy / (-9.81f * object_->Mass());
+    // Bare_point p0(y, 1000, 1000); 
+    // Bare_point p1(y, -1000, 1000); 
+    // Bare_point p2(y, 1000, -1000); 
+    // Tri_3 t(p0, p1, p2);
+    // gv_ << CGAL::PURPLE;
+    // gv_ << t;
+
+    // Bare_point p3(y, -1000, 1000); 
+    // Bare_point p4(y, 1000, -1000); 
+    // Bare_point p5(y, -1000, -1000); 
+    // Tri_3 t2(p3, p4, p5);
+    // gv_ << CGAL::PURPLE;
+    // gv_ << t2;
+    while(true);
 #endif
+    
+  }
+  return all_poses;
 }
+
+

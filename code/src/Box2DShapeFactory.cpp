@@ -1,7 +1,10 @@
 #include "Simulation/Box2DShapeFactory.hpp"
 
+#include <fstream>
 #include <iostream>
 #include "Util.h"
+
+#include <glog/logging.h>
 
 float Box2DShapeFactory::default_density = 0.01f;
 float Box2DShapeFactory::default_friction = 0.0f;

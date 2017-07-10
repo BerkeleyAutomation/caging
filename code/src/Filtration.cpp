@@ -1,6 +1,9 @@
 #include "Filtration.h"
+#include "Configuration_Space_Approximator.h"
+#include "Util.h"
 
 #include <glog/logging.h>
+#include "phat/compute_persistence_pairs.h"
 
 Filtration_3::Filtration_3(Potential potential)
   : potential_(potential)
@@ -24,13 +27,23 @@ Potential Filtration_3::simplex_potential(Index i)
   return simplices_[i+cutoff_index_].potential();
 }
 
+bool Filtration_3::simplex(Cell_handle ch, ASE::Simplex& s)
+{
+  if (indices_.find(ch) == indices_.end()) {
+    LOG(ERROR) << "Could not find cell handle";
+    return false;
+  }
+  s = simplices_[indices_[ch]];
+  return true;
+}
+
 void Filtration_3::update_classification()
 {
   Index i;
   bool found_cutoff = false;
   for (i = 0; i < simplices_.size() && !found_cutoff; i++) {
     // LOG(INFO) << "Simplex " << i << " " << simplices_[i].potential() << " cutoff " << potential_;
-    if (simplices_[i].potential() >= potential_) {
+    if (simplices_[i].potential() > potential_) {
       found_cutoff = true;
     }
   }
@@ -46,6 +59,33 @@ ASE::Filtration_Cell_Class Filtration_3::classify(Cell_handle ch, bool print)
     return ASE::INVALID;
   }
   if (indices_[ch] < cutoff_index_) {
+    return ASE::INTERIOR;
+  }
+  return ASE::EXTERIOR;
+}
+
+
+ASE::Filtration_Cell_Class Filtration_3::classify(Cell_handle ch1, Cell_handle ch2, bool print)
+{
+  if (indices_.find(ch1) == indices_.end() || indices_.find(ch2) == indices_.end()) {
+    if (print)
+      LOG(INFO) << "invalid";
+    return ASE::INVALID;
+  }
+
+  int cur_index;
+  bool match_found = false;
+  for (int i = 0; i < 4 && !match_found; i++) {
+    cur_index = cell_info_map_[ch1].facet_index(i);
+    for (int j = 0; j < 4 && !match_found; j++) {
+      int other_index = cell_info_map_[ch2].facet_index(j);
+      if (cur_index == other_index) {
+       match_found = true;
+      }
+    }
+  }
+
+  if (cur_index < cutoff_index_) {
     return ASE::INTERIOR;
   }
   return ASE::EXTERIOR;
@@ -79,6 +119,17 @@ void Filtration_3::subcomplex_exterior(std::vector<Cell_handle>& complex, Potent
   for (unsigned int i = cutoff_index_; i < simplices_.size(); i++) {
     if (CGAL::assign(ch, simplices_[i].object())) {
       complex.push_back(ch);
+    }
+  }
+}
+
+void Filtration_3::subcomplex_exterior_simplices(std::vector<ASE::Simplex>& complex)
+{
+  complex.clear();
+  Cell_handle ch;
+  for (unsigned int i = cutoff_index_; i < simplices_.size(); i++) {
+    if (CGAL::assign(ch, simplices_[i].object())) {
+      complex.push_back(simplices_[i]);
     }
   }
 }
@@ -225,6 +276,140 @@ void Filtration_3::set_index_of_facet(const Triangulation_3& T, const Facet& f, 
 void Filtration_3::save_boundary_matrix(std::string filename)
 {
   boundary_matrix_.save_binary(filename.c_str());
+}
+
+//Synthesis method for deciding the bext simplex in which to place the object.
+std::vector< Persistence_info > Filtration_3::run_persistence(std::vector<Weighted_point> points_at_infinity,
+                                                              Potential cutoff,
+                                                              float theta_scale,
+                                                              ASE::Vertex& birth_point,
+                                                              float min_energy_thresh)
+{
+  //Save pair data out to a scv!
+  std::ofstream of("persistance_pairs.csv", std::ios::app);  	
+  
+  set_potential(cutoff);
+  
+  // define the object to hold the resulting persistence pairs
+  phat::persistence_pairs pairs;
+
+  // choose an algorithm (choice affects performance) and compute the persistence pair
+  // (modifies boundary_matrix)
+  phat::compute_persistence_pairs< phat::twist_reduction >( pairs, boundary_matrix_ );
+ 
+  //Vector of pairs of energy deltas and the corresponding death simplex.
+  std::vector< Persistence_info > delta_pairs;
+      
+  for (phat::index i = 0; i < pairs.get_num_pairs(); i++)
+  {
+    phat::index birth_index = pairs.get_pair(i).first;
+    phat::index death_index = pairs.get_pair(i).second;
+    Potential birth_energy = simplices_[birth_index].potential();
+    Potential death_energy = simplices_[death_index].potential();
+    Potential energy_delta = abs(birth_energy - death_energy);
+    ASE::Simplex birth_simplex = simplices_[birth_index];
+    ASE::Simplex death_simplex = simplices_[death_index];
+          
+    if ( (birth_index < cutoff_index_ && death_index < cutoff_index_) 
+         || energy_delta < min_energy_thresh
+         || touches_infinity(simplices_[birth_index], points_at_infinity) || touches_infinity(simplices_[death_index], points_at_infinity) 
+         || simplices_[death_index].dim() != 3 )
+    {
+      continue;
+    }
+
+    if (energy_delta == 0) {
+      continue;
+    }
+
+    Persistence_info temp_info(energy_delta, birth_simplex, death_simplex, birth_index, death_index);
+    delta_pairs.push_back(temp_info);  
+
+    of << birth_index << ", " << death_index <<  "\n";
+  
+    ////DEBUG Sanity check that the birth simplex is two dimensional....
+    //if (simplices_[birth_index].dim() != 2)
+    //{
+    //  std::cout << "SHADY SHIT!" << std::endl;
+    //  std::cout << "ENERGY LEVEL" << energy_delta << std::endl;
+    //}
+
+    //DEBUG Check potential
+    //if (energy_delta > 50.0){
+    //  std::cout << "FILTRATION POTENTIAL: " << energy_delta << std::endl;
+    //  std::cout << "DEATH INDEX " << birth_index << std::endl;
+    //  std::cout << "BIRTH INDEX " << death_index << std::endl;
+    //  std::cout << "CUTOFF INDEX " << cutoff_index_ << std::endl;
+    //}
+  }
+
+  //while(1){}
+
+  //We want the death index (simplex) corresponding to the the larget energy delta!
+  std::sort(delta_pairs.begin(), delta_pairs.end());
+
+ 
+  ////Just some good 'ol debug to print the largest energy_delta and other information....
+  //for (unsigned int i = delta_pairs.size()-1; i >= delta_pairs.size()-20; i--)
+  //  std::cout << "Delta for " << delta_pairs.size()-1-i << "th highest energy: " << delta_pairs[i].get_potential() << std::endl;    
+  //std::cout << "Largest Delta: " << delta_pairs.back().get_potential() << std::endl;
+  //ASE::Simplex birth_simplex = delta_pairs.back().get_birth_simplex();
+  //ASE::Simplex death_simplex = delta_pairs.back().get_death_simplex();
+ 
+
+  //ASE::Vertex death_vertex;
+  //Potential highest_potential = -FLT_MAX; 
+  //std::cout << "Type: " << death_simplex.dim() << std::endl;
+  //for (int i = 0; i <= death_simplex.dim(); i++) 
+  //{
+  //  ASE::Vertex cur_vertex = death_simplex.vertex(i); 
+  //  Potential cur_potential = free_potential_func.potential(cur_vertex);
+  //  if (cur_potential > highest_potential)
+  //  {
+  //    highest_potential = cur_potential;
+  //    death_vertex = cur_vertex;
+  //  }
+  //} 
+
+  //highest_potential = -FLT_MAX; 
+  //for (int i = 0; i <= birth_simplex.dim(); i++) 
+  //{
+  //  ASE::Vertex cur_vertex = birth_simplex.vertex(i); 
+  //  Potential cur_potential = free_potential_func.potential(cur_vertex);
+  //  if (cur_potential > highest_potential)
+  //  {
+  //    highest_potential = cur_potential;
+  //    birth_point = cur_vertex;
+  //  }
+  //}
+
+  ////Point_3 centroid = death_simplex.centroid();
+  ////ASE::Vertex best_pose(Bare_point((float) CGAL::to_double(centroid.x()),
+  //  //                               (float) CGAL::to_double(centroid.y()),
+  //    //                             fmod(((float) CGAL::to_double(centroid.z()) / theta_scale),(2*M_PI))),
+  //      //                1.0);
+  ////std::cout << "best pose: " << best_pose << std::endl;
+  ////std::cout << "highest_potential: " << highest_potential << std::endl;  
+
+  of.close();
+
+  return delta_pairs;   
+}
+
+bool Filtration_3::touches_infinity(ASE::Simplex given_simplex, std::vector<Weighted_point> points_at_infinity)
+{
+  for (int i = 0; i <= given_simplex.dim(); i++)
+  {
+    ASE::Vertex cur_vertex = given_simplex.vertex(i); 
+    for (int j = 0; j < points_at_infinity.size(); j++)
+    {   
+      if (points_at_infinity[j].point() == cur_vertex.point())
+      {
+        return true;
+      } 
+    }  
+  }
+  return false; 
 }
 
 Alpha_Shape_Filtration_3::Alpha_Shape_Filtration_3(const Alpha_shape_3& alpha_shape)

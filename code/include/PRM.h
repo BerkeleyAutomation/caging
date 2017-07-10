@@ -21,43 +21,13 @@
 #ifndef PRM_H
 #define PRM_H
 
-#include <CGAL/Cartesian.h>
-#include <CGAL/Aff_transformation_3.h>
-#include <iostream>
-#include <CGAL/Timer.h>
 #include "CollisionChecker.h"
 #include "WorkspaceObject.h"
 #include "ConfigurationMapper.h"
 #include "Planner.h"
 #include "Triangulation_Planner.h"
-
-#include <list>
-#include <vector>
-#include <math.h>
-
-#include <fstream>
+#include "Typedef.h"
 #include <unistd.h> // for sleep()
-
-
-#include <CGAL/IO/Geomview_stream.h>
-#include <CGAL/IO/Triangulation_geomview_ostream_3.h>
-#include <CGAL/IO/Polyhedron_geomview_ostream.h>
-#include <CGAL/utility.h>
-
-#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-#include <CGAL/Polyhedron_3.h>
-typedef CGAL::Exact_predicates_exact_constructions_kernel Kernel;
-typedef CGAL::Polyhedron_3<Kernel> Polyhedron_3;
-typedef CGAL::Aff_transformation_3<Kernel> CGAL_Aff_Transform;
-
-
-typedef CGAL::Timer                         Timer;
-
-typedef std::vector<double>                                 Configuration;
-typedef std::list< Configuration >                          Path;
-typedef std::pair< Path, bool >                             Path_with_exist;
-
-
 
 //typedef CGAL::Unique_hash_map<Vertex_handle, bool>         Point_map;
 

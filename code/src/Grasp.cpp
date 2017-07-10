@@ -1,5 +1,7 @@
 #include "Grasp.hpp"
 
+#include <glog/logging.h>
+
 ParallelJawGrasp2D::ParallelJawGrasp2D(GripperConfig config)
   : config_(config)
 {
@@ -65,56 +67,107 @@ void ParallelJawGrasp2D::EndpointsToGrasp(ASE::Vertex2d g1, ASE::Vertex2d g2, Gr
   }
 }
 
-ThreeFingerGrasp2D::ThreeFingerGrasp2D(GripperConfig config)
+
+QuadGrasp2D::QuadGrasp2D(GripperConfig config)
   : config_(config)
 {
   SetState(config);
 }
 
-void ThreeFingerGrasp2D::SetState(GripperConfig config)
+void QuadGrasp2D::SetState(GripperConfig config)
+{
+  const unsigned int num_gripper_fingers = 4;
+  std::vector<ComponentConfig> configs;
+  Eigen::Matrix3f root_pose = CreatePose2D(config.cx, config.cy, config.theta);
+  Eigen::Matrix4f root_pose_3d = CreatePose(config.cx, config.cy, config.theta);
+  Eigen::Matrix3f grip_pose;
+  float tx, ty, theta;
+  configs.resize(num_gripper_fingers);
+  float radius = 7.0f;
+
+  // gripper 1
+  configs[0].scale = config.scale;
+  configs[0].cx = radius;
+  configs[0].cy = radius;
+  configs[0].theta = 0;
+  configs[0].sdf_filename = config.sdf_filename;
+  configs[0].obj_filename = config.obj_filename;
+
+  // gripper 2
+  configs[1].scale = config.scale;
+  configs[1].cx = radius;
+  configs[1].cy = -radius;
+  configs[1].theta = 0;
+  configs[1].sdf_filename = config.sdf_filename;
+  configs[1].obj_filename = config.obj_filename;
+
+  // gripper 3
+  configs[2].scale = config.scale;
+  configs[2].cx = -radius;
+  configs[2].cy = -radius;
+  configs[2].theta = 0;
+  configs[2].sdf_filename = config.sdf_filename;
+  configs[2].obj_filename = config.obj_filename;
+
+  // gripper 4
+  configs[3].scale = config.scale;
+  configs[3].cx = -radius;
+  configs[3].cy = radius;
+  configs[3].theta = 0;
+  configs[3].sdf_filename = config.sdf_filename;
+  configs[3].obj_filename = config.obj_filename;
+
+  // init root object
+  if (!Initialized()) {
+    Mesh::Initialize(configs, root_pose_3d);
+  }
+  else {
+    // std::cout << "Root pose " << config.theta << " " << config.width << std::endl;
+    // std::cout << root_pose_3d << std::endl;
+    Mesh::SetPose(root_pose_3d);
+    Mesh::SetRelativePoses(configs);
+  }
+}
+
+
+TriGrasp2D::TriGrasp2D(GripperConfig config)
+  : config_(config)
+{
+  SetState(config);
+}
+
+void TriGrasp2D::SetState(GripperConfig config)
 {
   const unsigned int num_gripper_fingers = 3;
   std::vector<ComponentConfig> configs;
   Eigen::Matrix3f root_pose = CreatePose2D(config.cx, config.cy, config.theta);
   Eigen::Matrix4f root_pose_3d = CreatePose(config.cx, config.cy, config.theta);
   Eigen::Matrix3f grip_pose;
+  float tx, ty, theta;
   configs.resize(num_gripper_fingers);
-
-  float arc = 1.2f;
-  Eigen::Vector3f v;
-  v << 0, -config.width, 1.0f;
-  float theta0 = 0.0f * 2.0f * M_PI / 3.0f;
-  float theta1 = M_PI - arc * M_PI / 3.0f;
-  float theta2 = M_PI + arc * M_PI / 3.0f;
-  Eigen::Matrix3f T0 = CreatePose2D(0.0f, 0.0f, -theta0);
-  Eigen::Matrix3f T1 = CreatePose2D(0.0f, 0.0f, -theta1);
-  Eigen::Matrix3f T2 = CreatePose2D(0.0f, 0.0f, -theta2);
-  Eigen::Vector3f w;
+  float radius = 7.0f;
 
   // gripper 1
-  w = T0 * v;
   configs[0].scale = config.scale;
-  configs[0].cx = w(0);
-  configs[0].cy = w(1);
-  configs[0].theta = theta0;//M_PI/ 2;
+  configs[0].cx = -radius;
+  configs[0].cy = 0;
+  configs[0].theta = 0;
   configs[0].sdf_filename = config.sdf_filename;
   configs[0].obj_filename = config.obj_filename;
 
   // gripper 2
-  w = T1 * v;
   configs[1].scale = config.scale;
-  configs[1].cx = w(0);
-  configs[1].cy = w(1);
-  configs[1].theta = theta1;
+  configs[1].cx = 0;
+  configs[1].cy = -radius;
+  configs[1].theta = 0;
   configs[1].sdf_filename = config.sdf_filename;
   configs[1].obj_filename = config.obj_filename;
 
-  // gripper 2
-  w = T2 * v;
+  // gripper 3
   configs[2].scale = config.scale;
-  configs[2].cx = w(0);
-  configs[2].cy = w(1);
-  configs[2].theta = theta2;
+  configs[2].cx = 0;
+  configs[2].cy = radius;
+  configs[2].theta = 0;
   configs[2].sdf_filename = config.sdf_filename;
   configs[2].obj_filename = config.obj_filename;
 
@@ -129,6 +182,7 @@ void ThreeFingerGrasp2D::SetState(GripperConfig config)
     Mesh::SetRelativePoses(configs);
   }
 }
+
 
 OneFingerGrasp2D::OneFingerGrasp2D(GripperConfig config)
   : config_(config)
@@ -166,6 +220,11 @@ void OneFingerGrasp2D::SetState(GripperConfig config)
 void LoadGrasps(const std::string& filename, GripperConfig config_template, std::vector<GripperConfig>& configs)
 {
   std::ifstream ifile(filename.c_str());
+  if (!ifile.is_open()) {
+    LOG(ERROR) << "Failed to open grasps file " << filename;
+    configs.clear();
+    return;
+  }
 
   char line_buffer[2000];
   while(!ifile.eof()) { 

@@ -7,7 +7,6 @@
 #include "Simulation/ConvergenceTest.h"
 
 #include <ccd/ccd.h>
-#include <SOLID/MT_Quaternion.h>
 
 #include <glog/logging.h>
 
@@ -40,24 +39,19 @@ void support(const void* obj, const ccd_vec3_t *dir, ccd_vec3_t* vec)
   Eigen::Vector4f max_v;
 
   // get vertex with max x coordinate
-  // std::cout << "Dir " << d.transpose() << std::endl;
-
   if (g_p) {
     std::cout << "Dir " << d.transpose() << std::endl;
     std::cout << "Pose " << poly->pose << std::endl;
   }
 
   for (unsigned int i = 0; i < poly->vertices.size(); i++) {
-    //    std::cout << "V " << i << " " << poly->vertices[i].transpose() << std::endl;
-
     Eigen::Vector4f v;
     v << poly->vertices[i], 1.0f;
     Eigen::Vector4f p = poly->pose * v;
 
     float dot = d.dot(p.head<3>());
-    // std::cout << "P " << i << " " << p.transpose() << " " << dot << std::endl;
     if (dot > max_dot) {
-      max_dot = dot;//p(0);
+      max_dot = dot;
       max_ind = i;
       max_v = p;
     }
@@ -123,6 +117,7 @@ void Mesh::Initialize(ComponentConfig config, Eigen::Matrix4f root_pose)
 
 void Mesh::Initialize(std::vector<ComponentConfig> configs, Eigen::Matrix4f root_pose)
 {
+  
   initialized_ = true;
   pose_root_world_ = root_pose;
   tris_need_update_ = false;
@@ -297,7 +292,7 @@ void Mesh::ConvexDecomposition2D(float extrusion)
 
   // add convex pieces for each component
   for (unsigned int k = 0; k < NumComponents(); k++) {
-    LOG(INFO) << "Adding convex pieces for component " << k;
+    LOG(INFO) << "Adding convex pieces for component " << k << " of " << NumComponents();
     std::vector< std::vector<b2Vec2> > convex_pieces_2d = all_convex_pieces_2d[k];
 
     // set up the goddamn polygons
@@ -310,7 +305,7 @@ void Mesh::ConvexDecomposition2D(float extrusion)
         Eigen::Vector3f v;
         v << convex_pieces_2d[i][j].x, convex_pieces_2d[i][j].y, extrusion;
         convex_pieces_2d_[k][i].vertices.push_back(v);
-
+        
         // back face
         Eigen::Vector3f w;
         w << convex_pieces_2d[i][j].x, convex_pieces_2d[i][j].y, -extrusion;
@@ -417,7 +412,7 @@ std::vector<std::vector<fcl::Vec3f> > Mesh::BoundaryVertices()
     unsigned int prev_vert_ind = first_vert_ind;
     std::vector<unsigned int> cur_edges = it->second;
     boundary_verts[i].push_back(fcl_vertices_[i][cur_vert_ind]);                                   
-    
+
     // assume that it forms a loop
     do {
       // get next edge
@@ -633,8 +628,6 @@ void Mesh::SetPose(Eigen::Matrix4f pose, bool update_tris, bool print)
   g_p = false;
   pose_root_world_ = pose;
   float tx, ty, theta;
-  // std::cout << "Mesh" << std::endl;
-  //  std::cout << pose_root_world_ << std::endl;
 
   // create pd pose
   for (unsigned int k = 0; k < NumComponents(); k++) {
@@ -655,12 +648,6 @@ void Mesh::SetPose(Eigen::Matrix4f pose, bool update_tris, bool print)
       std::cout << pose_root_world_ << std::endl;
       g_p = true;
     }
-    // std::cout << "Tf" << std::endl;
-    // for (unsigned int a = 0; a < 4; a++) {
-    //   for (unsigned int b = 0; b < 4; b++)
-    //     std::cout << transform[a+4*b] << " ";
-    //   std::cout << std::endl;
-    // }
 
     // negative because x and y axes are reverse for SDF coords
     Eigen::Matrix3f pose_2d = Pose3DTo2D(pose);
@@ -699,7 +686,6 @@ bool Mesh::SetRelativePoses(std::vector<ComponentConfig> configs)
     pose_comp_root_2d = CreatePose2D(tx, ty, theta);
     poses_comp_root_[k] = CreatePose(tx, ty, theta);
     sdfs_[k]->SetPose(pose_comp_root_2d);
-  //   std::cout << "Pose " << k << "\n" << pose_comp_root_2d << std::endl;
   }
 
   InitializeRendering(true);
@@ -883,29 +869,19 @@ void Mesh::RenderTrisToImage(cv::Mat& image, float scale, char color, bool draw_
 
       cv::line(image, pt_up, pt_down, center_color, thickness);
       cv::line(image, pt_left, pt_right, center_color, thickness);
-      //      cv::circle(image, centers[i], radius, center_color, thickness);
     }
   }
-
-
-  // draw contours with color
-  // int idx = -1;
-  // for (int i = 0; i < contours.size(); i++) {
-  //   if (contours[i].size() != 3) {
-  //     std::cout << "Contours fkd at " << i << ": " << contours[i].size() << std::endl;
-  //   }
-  // }
-  // cv::drawContours(image, contours, idx, act_color, CV_FILLED);
 }
 
 MeshCollisionResult Mesh::LowerBoundCollision(Mesh* mesh1, Mesh* mesh2, bool print)
 {
-  bool collision = true;
+  bool collision = false;
   Timer timer;
   timer.start();
 
   float pen_depth = 0.0f;
   float pd;
+  float epa_tolerance = 1e-3f;
   int coll_i = -1;
   int coll_j = -1;  
   int coll_k = -1;
@@ -930,9 +906,8 @@ MeshCollisionResult Mesh::LowerBoundCollision(Mesh* mesh1, Mesh* mesh2, bool pri
           ccd.support1 = support;
           ccd.support2 = support;
           ccd.max_iterations = 100;
-          ccd.epa_tolerance  = 1e-6;
+          ccd.epa_tolerance  = epa_tolerance;
           ccd.dist_tolerance  = 0.0f;
-          ccd.mpr_tolerance  = 1e-6;
           ccd_real_t depth = 0.0;
           ccd_vec3_t dir;
           ccd_vec3_t pos;
@@ -945,18 +920,18 @@ MeshCollisionResult Mesh::LowerBoundCollision(Mesh* mesh1, Mesh* mesh2, bool pri
           if (print) {
             std::cout << "Collision " << coll << std::endl;
             std::cout << "Pen Depth " << pd << std::endl;
-            // std::cout << "Dir " << dir.v[0] << " " << dir.v[1] << " " << dir.v[2] << std::endl;
-            // std::cout << "Pose k " << convex_pieces1[i][k].pose << std::endl;
-            // std::cout << "Pose l " << convex_pieces2[j][l].pose << std::endl;
           }
 
           // update penetration depth if larger
-          if (coll && pd > pen_depth) {
-            pen_depth = pd;
+          if (coll) {
+            collision = true;
             coll_i = i;
             coll_j = j;
             coll_k = k;
             coll_l = l;
+            if (pd > pen_depth) {
+              pen_depth = pd;
+            }
           }
         }
       }
@@ -972,12 +947,15 @@ MeshCollisionResult Mesh::LowerBoundCollision(Mesh* mesh1, Mesh* mesh2, bool pri
     std::cout << "Coll L " << coll_l << std::endl;
   }
 
+  // subtract off the epa tolerance
+  pen_depth = std::max<float>(0.0f, pen_depth - epa_tolerance);
+
   // if pen depth is 0 then we calculate the closest distance
-  if (pen_depth == 0.0f) {
-    collision = false;
-    pen_depth = 0.0f;
-    //    return Distance(mesh1, mesh2);
-  }
+  // if (pen_depth == 0.0f) {
+  //   collision = false;
+  //   pen_depth = 0.0f;
+  //   //    return Distance(mesh1, mesh2);
+  // }
   timer.stop();
   float time_elapsed = timer.time();
   
@@ -1133,9 +1111,6 @@ MeshCollisionResult Mesh::Distance(Mesh* mesh1, Mesh* mesh2)
     }
   }
   timer.stop();
-  // std::cout << "Min " << min_distance << std::endl;
-  // std::cout << "Comp1 " << mesh1->NumComponents() << std::endl;
-  // std::cout << "Comp2 " << mesh2->NumComponents() << std::endl;
   float time_elapsed = timer.time();
   bool collision = (min_distance <= 0);
   

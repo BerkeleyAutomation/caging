@@ -15,7 +15,7 @@
 #define STD_MASS 0.03f
 
 // global defaults
-b2Vec2 g_gravityVec = b2Vec2(0.0f, -GravityPotential::GRAVITY_ACCEL);
+b2Vec2 g_gravityVec = b2Vec2(0.0f, -9.81f);
 float32 g_forceSigma = 0.25f;
 float32 g_torqueSigma = M_PI / 256.0f;
 float32 g_cagedTol = 1e-1f; // tolerance of caging
@@ -284,7 +284,7 @@ void ConvergenceTest::Step(Settings* settings)
     float object_angle = object_body_->GetAngle();
 
     // TODO:: change to use a single potential
-    float cur_gravity_potential = GravityPotential::GRAVITY_ACCEL * object_mass_ * (object_pos.y - object_start_pos_.y);
+    float cur_gravity_potential = 9.81f * object_mass_ * (object_pos.y - object_start_pos_.y);
     max_potential_ = std::max<float>(cur_gravity_potential, max_potential_);
 
     // calculate new force, torque
