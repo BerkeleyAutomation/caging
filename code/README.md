@@ -1,11 +1,11 @@
 Code for Synthesizing Energy-Bounded Cages
-------------------------------------------
+==========================================
 
 Energy-bounded cages (EBCs) are a robust approach to robot grasping and pushing in the presence of forces such as gravity and friction. This repository contains the research code to analyze and synthesize EBCs.
 
 Publications
-============
-The code was used in the following publications.
+-------------
+This code accompanies the following publications.
 
 [1] Synthesis of Energy-Bounded Planar Caging Grasps using Persistent Homology Jeffrey Mahler, Florian Pokorny, Sherdil Niyaz, Ken Goldberg. Workshop on the Algorithmic Foundations of Robotics, 2016.
 
@@ -14,7 +14,7 @@ The code was used in the following publications.
 Please cite [1] if you use this code in a research publication.
 
 Installation
-============
+------------
 The code is known to run on Ubuntu 14.04 LTS.
 
 The following libraries are required for installation and usage:
@@ -32,8 +32,7 @@ make -j4
 If successful, the binary will be at build/src/alpha.
 
 Authors
-=======
-
+-------
 Jeffrey Mahler, Sherdil Niyaz, and Zoe McCarthy
 jmahler@berkeley.edu
 sniyaz@berkeley.edu
@@ -42,8 +41,7 @@ AUTOLAB, UC Berkeley
 
 
 Note
-====
-
+----
 This project is ongoing research on using alpha shapes and persistent homology for proving
 path existence / nonexistence for the anaysis and synthetis of robot caging configurations.
 It was adapted from Zoe McCarthy's work at UIUC on path planning:
