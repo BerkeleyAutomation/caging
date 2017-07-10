@@ -1,8 +1,10 @@
 Code for Synthesizing Energy-Bounded Cages
 ------------------------------------------
 
-Energy-bounded cages (EBCs) are a robust approach to robot grasping and pushing in the presence of forces such as gravity and friction.
-This repository contains the research code to analyze and synthesize EBCs.
+Energy-bounded cages (EBCs) are a robust approach to robot grasping and pushing in the presence of forces such as gravity and friction. This repository contains the research code to analyze and synthesize EBCs.
+
+Publications
+============
 The code was used in the following publications.
 
 [1] Synthesis of Energy-Bounded Planar Caging Grasps using Persistent Homology Jeffrey Mahler, Florian Pokorny, Sherdil Niyaz, Ken Goldberg. Workshop on the Algorithmic Foundations of Robotics, 2016.
@@ -11,7 +13,26 @@ The code was used in the following publications.
 
 Please cite [1] if you use this code in a research publication.
 
-AUTHORS:
+Installation
+============
+The code is known to run on Ubuntu 14.04 LTS.
+
+The following libraries are required for installation and usage:
+* CGAL
+* SOLID collision detection
+* QHULL
+* CGAL's geomview stream (will only work in linux)
+
+Install the dependencies above as well as 3rdparty/libccd, then build using the standard cmake workflow:
+
+mkdir build && cd build
+cmake ..
+make -j4
+
+If successful, the binary will be at build/src/alpha.
+
+Authors
+=======
 
 Jeffrey Mahler, Sherdil Niyaz, and Zoe McCarthy
 jmahler@berkeley.edu
@@ -19,15 +40,9 @@ sniyaz@berkeley.edu
 zoemccarthy12@gmail.com
 AUTOLAB, UC Berkeley
 
-INSTALLATION:
 
-Libraries required for installation and usage:
-- CGAL
-- SOLID collision detection
-- QHULL
-- CGAL's geomview stream (will only work in linux)
-
-NOTE:
+Note
+====
 
 This project is ongoing research on using alpha shapes and persistent homology for proving
 path existence / nonexistence for the anaysis and synthetis of robot caging configurations.
