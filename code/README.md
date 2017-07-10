@@ -29,6 +29,7 @@ Install the dependencies above as well as 3rdparty/libccd, then build using the 
 mkdir build && cd build
 cmake ..
 make -j4
+cd ..
 ```
 
 If successful, the binary will be at build/src/alpha.
