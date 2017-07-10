@@ -25,7 +25,8 @@ The following libraries are required for installation and usage:
 
 Install the dependencies above as well as 3rdparty/libccd, then build using the standard cmake workflow:
 
-```mkdir build && cd build
+```
+mkdir build && cd build
 cmake ..
 make -j4
 ```
